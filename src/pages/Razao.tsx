@@ -1,14 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import {
-  ArrowLeft,
-  Loader2,
-  MessageSquare,
-  MessageSquarePlus,
-  Search,
-  FileSpreadsheet,
-  FileText,
-} from 'lucide-react'
+import { ArrowLeft, Loader2, Search, FileSpreadsheet, FileText } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
 import { Button } from '@/components/ui/button'
@@ -34,7 +26,7 @@ import {
   EntryItem,
 } from '@/services/accounting'
 import { getAuditCommentsByProject, AuditComment } from '@/services/audit_comments'
-import { AuditCommentModal } from '@/components/AuditCommentModal'
+import { InlineAuditNote } from '@/components/InlineAuditNote'
 
 const formatNum = (val: number) =>
   new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
@@ -53,9 +45,6 @@ export default function Razao() {
   const [searchQuery, setSearchQuery] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
-
-  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false)
-  const [selectedEntryForComment, setSelectedEntryForComment] = useState<any>(null)
 
   useEffect(() => {
     if (!accountId || !projectId) return
@@ -336,23 +325,6 @@ export default function Razao() {
     }, 250)
   }
 
-  const handleOpenCommentModal = (e: React.MouseEvent, row: any) => {
-    e.stopPropagation()
-    setSelectedEntryForComment({
-      id: row.id,
-      data: row.dateStr,
-      codigoConta: account?.code,
-      conta: account?.name,
-      dc: row.type === 'debit' ? 'D' : 'C',
-      valor: row.value,
-      saldo: row.runningBalance,
-      dcSaldo: row.dc,
-      historico: row.description,
-      numero: row.reference,
-    })
-    setIsCommentModalOpen(true)
-  }
-
   return (
     <div className="flex flex-col gap-4 p-4 h-[calc(100vh-4rem)]">
       <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
@@ -459,17 +431,17 @@ export default function Razao() {
       </Card>
 
       <div className="rounded-md border bg-card flex-1 overflow-auto shadow-sm">
-        <Table className="relative min-w-[1000px]">
+        <Table className="relative min-w-[1200px]">
           <TableHeader className="sticky top-0 bg-background z-10 shadow-sm border-b">
             <TableRow>
               <TableHead className="w-[100px]">Data</TableHead>
-              <TableHead>Histórico</TableHead>
+              <TableHead className="w-[200px]">Histórico</TableHead>
               <TableHead className="w-[120px]">Referência</TableHead>
-              <TableHead className="w-[250px]">Contrapartida</TableHead>
+              <TableHead className="w-[200px]">Contrapartida</TableHead>
               <TableHead className="w-[120px] text-right">Débito</TableHead>
               <TableHead className="w-[120px] text-right">Crédito</TableHead>
               <TableHead className="w-[140px] text-right">Saldo</TableHead>
-              <TableHead className="w-[80px] text-center">Auditoria</TableHead>
+              <TableHead className="w-[250px]">Notas de Auditoria</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -529,22 +501,17 @@ export default function Razao() {
                         )}
                       >
                         <TableCell className="py-2 text-sm">{row.dateStr}</TableCell>
-                        <TableCell className="py-2 text-sm">
-                          <div>{row.description}</div>
-                          {hasComment && (
-                            <div className="mt-1 flex items-start gap-1.5 bg-background/50 p-1.5 rounded-md border border-blue-100 dark:border-blue-900">
-                              <MessageSquare className="w-3.5 h-3.5 mt-0.5 text-blue-600 dark:text-blue-400 shrink-0" />
-                              <span className="text-xs text-blue-700 dark:text-blue-300 italic">
-                                {comment.comment}
-                              </span>
-                            </div>
-                          )}
+                        <TableCell
+                          className="py-2 text-sm truncate max-w-[200px]"
+                          title={row.description}
+                        >
+                          {row.description}
                         </TableCell>
                         <TableCell className="py-2 text-sm font-mono text-muted-foreground">
                           {row.reference}
                         </TableCell>
                         <TableCell
-                          className="py-2 text-sm text-muted-foreground truncate max-w-[250px]"
+                          className="py-2 text-sm text-muted-foreground truncate max-w-[200px]"
                           title={row.counterpartStr}
                         >
                           {row.counterpartStr}
@@ -561,24 +528,13 @@ export default function Razao() {
                             {row.dc}
                           </span>
                         </TableCell>
-                        <TableCell className="py-2 text-center">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className={cn(
-                              'h-8 w-8',
-                              hasComment &&
-                                'bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50',
-                            )}
-                            onClick={(e) => handleOpenCommentModal(e, row)}
-                            title="Comentário de Auditoria"
-                          >
-                            {hasComment ? (
-                              <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400 fill-blue-100 dark:fill-blue-900/30" />
-                            ) : (
-                              <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
-                            )}
-                          </Button>
+                        <TableCell className="py-2">
+                          <InlineAuditNote
+                            projectId={projectId!}
+                            userId={user?.id!}
+                            entryReference={row.id}
+                            comment={comment || null}
+                          />
                         </TableCell>
                       </TableRow>
                     )
@@ -589,15 +545,6 @@ export default function Razao() {
           </TableBody>
         </Table>
       </div>
-
-      <AuditCommentModal
-        isOpen={isCommentModalOpen}
-        onClose={() => setIsCommentModalOpen(false)}
-        entry={selectedEntryForComment}
-        comment={selectedEntryForComment ? comments[selectedEntryForComment.id] || null : null}
-        projectId={projectId!}
-        userId={user?.id!}
-      />
     </div>
   )
 }
