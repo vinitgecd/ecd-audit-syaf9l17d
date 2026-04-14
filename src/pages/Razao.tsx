@@ -167,10 +167,10 @@ export default function Razao() {
       entries = entries.filter((r) => {
         const c = comments[r.id]
         if (!c) return false
+        if (statusFilter === 'with_comments') return true
         return c.status === statusFilter
       })
     }
-
     return entries
   }, [accountInfo.codigo, date, searchQuery, typeFilter, statusFilter, comments])
 
@@ -469,6 +469,7 @@ export default function Razao() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="with_comments">Com Comentários</SelectItem>
             <SelectItem value="pending">Pendente</SelectItem>
             <SelectItem value="approved">Aprovado</SelectItem>
             <SelectItem value="rejected">Reprovado</SelectItem>

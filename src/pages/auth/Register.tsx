@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, Navigate } from 'react-router-dom'
+import { Link, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -8,10 +8,12 @@ import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { BarChart2 } from 'lucide-react'
 
-export default function Login() {
-  const { user, signIn } = useAuth()
-  const [email, setEmail] = useState('vinitg44@gmail.com')
-  const [password, setPassword] = useState('Skip@Pass')
+export default function Register() {
+  const { user, signUp } = useAuth()
+  const navigate = useNavigate()
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
 
@@ -22,13 +24,19 @@ export default function Login() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
-    const { error } = await signIn(email, password)
+    const { error } = await signUp(name, email, password)
     if (error) {
       toast({
         variant: 'destructive',
-        title: 'Erro no login',
-        description: 'Credenciais inválidas. Tente novamente.',
+        title: 'Erro no cadastro',
+        description: error?.response?.message || 'Verifique os dados e tente novamente.',
       })
+    } else {
+      toast({
+        title: 'Cadastro realizado',
+        description: 'Sua conta foi criada com sucesso!',
+      })
+      navigate('/')
     }
     setLoading(false)
   }
@@ -41,10 +49,21 @@ export default function Login() {
             <BarChart2 className="h-6 w-6 text-primary" />
           </div>
           <CardTitle className="text-2xl font-bold tracking-tight">ECD Audit</CardTitle>
-          <CardDescription>Faça login na sua conta para gerenciar auditorias</CardDescription>
+          <CardDescription>Crie sua conta para começar a gerenciar auditorias</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Nome completo</Label>
+              <Input
+                id="name"
+                type="text"
+                placeholder="Seu nome"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="email">E-mail</Label>
               <Input
@@ -61,18 +80,20 @@ export default function Login() {
               <Input
                 id="password"
                 type="password"
+                placeholder="No mínimo 8 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={8}
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'Entrando...' : 'Entrar'}
+              {loading ? 'Cadastrando...' : 'Cadastrar'}
             </Button>
             <div className="mt-4 text-center text-sm">
-              Não tem uma conta?{' '}
-              <Link to="/register" className="text-primary hover:underline">
-                Cadastre-se
+              Já tem uma conta?{' '}
+              <Link to="/login" className="text-primary hover:underline">
+                Faça login
               </Link>
             </div>
           </form>

@@ -6,6 +6,7 @@ import Layout from './components/Layout'
 import { AuthProvider } from './hooks/use-auth'
 
 import Login from './pages/auth/Login'
+import Register from './pages/auth/Register'
 import Index from './pages/Index'
 import Projects from './pages/Projects'
 import Import from './pages/Import'
@@ -24,6 +25,7 @@ const App = () => (
         <Sonner />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
           <Route element={<Layout />}>
             <Route path="/" element={<Index />} />
             <Route path="/projects" element={<Projects />} />

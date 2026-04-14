@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Table,
@@ -45,54 +45,28 @@ import { ptBR } from 'date-fns/locale'
 
 import pb from '@/lib/pocketbase/client'
 import { AuditComment } from '@/services/audit_comments'
+import {
+  getProjects,
+  createProject,
+  updateProject,
+  deleteProject,
+  Project,
+} from '@/services/projects'
 import { DATA_WITH_IDS } from '@/lib/mock-data'
-
-export interface MockProject {
-  id: string
-  name: string
-  client: string
-  status: 'active' | 'archived' | 'completed'
-  created: string
-  updated: string
-}
-
-const initialProjects: MockProject[] = [
-  {
-    id: '1',
-    name: 'Auditoria Fiscal 2024',
-    client: 'TechCorp Ltda',
-    status: 'active',
-    created: new Date(Date.now() - 86400000 * 5).toISOString(),
-    updated: new Date().toISOString(),
-  },
-  {
-    id: '2',
-    name: 'Revisão Contábil Q3',
-    client: 'Indústria XPTO',
-    status: 'completed',
-    created: new Date(Date.now() - 86400000 * 30).toISOString(),
-    updated: new Date(Date.now() - 86400000 * 2).toISOString(),
-  },
-  {
-    id: '3',
-    name: 'Due Diligence - Aquisição',
-    client: 'Investimentos Alpha',
-    status: 'archived',
-    created: new Date(Date.now() - 86400000 * 90).toISOString(),
-    updated: new Date(Date.now() - 86400000 * 15).toISOString(),
-  },
-]
+import { useRealtime } from '@/hooks/use-realtime'
+import { useAuth } from '@/hooks/use-auth'
 
 const formatNum = (val: number) =>
   new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
 
 export default function Projects() {
-  const [projects, setProjects] = useState<MockProject[]>(initialProjects)
+  const { user } = useAuth()
+  const [projects, setProjects] = useState<Project[]>([])
   const [search, setSearch] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
-  const [editingProject, setEditingProject] = useState<MockProject | null>(null)
+  const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [auditComments, setAuditComments] = useState<AuditComment[]>([])
 
   const { toast } = useToast()
@@ -100,15 +74,37 @@ export default function Projects() {
   const [formData, setFormData] = useState({
     name: '',
     client: '',
-    status: 'active' as const,
+    status: 'active' as 'active' | 'archived' | 'completed',
   })
 
-  useEffect(() => {
-    pb.collection('audit_comments')
-      .getFullList<AuditComment>()
-      .then(setAuditComments)
-      .catch((err) => console.error('Failed to load audit comments for dashboard:', err))
+  const loadProjects = useCallback(async () => {
+    try {
+      const data = await getProjects()
+      setProjects(data)
+    } catch (err) {
+      console.error(err)
+    }
   }, [])
+
+  const loadComments = useCallback(async () => {
+    if (!user) return
+    try {
+      const data = await pb.collection('audit_comments').getFullList<AuditComment>({
+        filter: `project_id.user_id = "${user.id}"`,
+      })
+      setAuditComments(data)
+    } catch (err) {
+      console.error('Failed to load audit comments for dashboard:', err)
+    }
+  }, [user])
+
+  useEffect(() => {
+    loadProjects()
+    loadComments()
+  }, [loadProjects, loadComments])
+
+  useRealtime('projects', () => loadProjects(), !!user)
+  useRealtime('audit_comments', () => loadComments(), !!user)
 
   const revisedCount = auditComments.filter(
     (c) => c.status === 'approved' || c.status === 'rejected',
@@ -119,46 +115,65 @@ export default function Projects() {
     return acc + (entry ? entry.valor : 0)
   }, 0)
 
-  const handleCreate = (e: React.FormEvent) => {
+  const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    const newProject: MockProject = {
-      id: Math.random().toString(36).substring(2, 9),
-      name: formData.name,
-      client: formData.client,
-      status: formData.status,
-      created: new Date().toISOString(),
-      updated: new Date().toISOString(),
+    try {
+      await createProject({
+        name: formData.name,
+        client: formData.client,
+        status: formData.status,
+      })
+      setIsCreateOpen(false)
+      setFormData({ name: '', client: '', status: 'active' })
+      toast({ title: 'Sucesso', description: 'Projeto criado com sucesso.' })
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível criar o projeto.',
+      })
     }
-    setProjects([newProject, ...projects])
-    setIsCreateOpen(false)
-    setFormData({ name: '', client: '', status: 'active' })
-    toast({ title: 'Sucesso', description: 'Projeto criado com sucesso.' })
   }
 
-  const handleEdit = (project: MockProject) => {
+  const handleEdit = (project: Project) => {
     setEditingProject(project)
     setIsEditOpen(true)
   }
 
-  const handleUpdate = (e: React.FormEvent) => {
+  const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingProject) return
-
-    setProjects(
-      projects.map((p) =>
-        p.id === editingProject.id ? { ...editingProject, updated: new Date().toISOString() } : p,
-      ),
-    )
-    setIsEditOpen(false)
-    setEditingProject(null)
-    toast({ title: 'Sucesso', description: 'Projeto atualizado com sucesso.' })
+    try {
+      await updateProject(editingProject.id, {
+        name: editingProject.name,
+        client: editingProject.client,
+        status: editingProject.status,
+      })
+      setIsEditOpen(false)
+      setEditingProject(null)
+      toast({ title: 'Sucesso', description: 'Projeto atualizado com sucesso.' })
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível atualizar o projeto.',
+      })
+    }
   }
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!projectToDelete) return
-    setProjects(projects.filter((p) => p.id !== projectToDelete))
-    setProjectToDelete(null)
-    toast({ title: 'Sucesso', description: 'Projeto removido com sucesso.' })
+    try {
+      await deleteProject(projectToDelete)
+      setProjectToDelete(null)
+      toast({ title: 'Sucesso', description: 'Projeto removido com sucesso.' })
+    } catch (err) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível remover o projeto.',
+      })
+    }
   }
 
   const filteredProjects = projects.filter(
@@ -306,7 +321,9 @@ export default function Projects() {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground">
-                      {format(new Date(project.created), "dd 'de' MMM, yyyy", { locale: ptBR })}
+                      {project.created
+                        ? format(new Date(project.created), "dd 'de' MMM, yyyy", { locale: ptBR })
+                        : '-'}
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
@@ -402,7 +419,8 @@ export default function Projects() {
             <AlertDialogHeader>
               <AlertDialogTitle>Excluir Projeto</AlertDialogTitle>
               <AlertDialogDescription>
-                Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita.
+                Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita. Todos
+                os documentos e comentários associados também poderão ser perdidos.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
