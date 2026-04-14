@@ -1,4 +1,4 @@
-import { Fragment, useState, useMemo } from 'react'
+import { Fragment, useState, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -9,9 +9,12 @@ import {
   Search,
   ChevronRight,
   ArrowRightLeft,
+  MessageSquare,
+  MessageSquarePlus,
 } from 'lucide-react'
 import { format, parse, startOfDay, endOfDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -33,7 +36,27 @@ import {
 } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
+import { Switch } from '@/components/ui/switch'
+import { Label } from '@/components/ui/label'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+
 import { cn } from '@/lib/utils'
+import { useAuth } from '@/hooks/use-auth'
+import { useRealtime } from '@/hooks/use-realtime'
+import pb from '@/lib/pocketbase/client'
+import {
+  getAuditCommentsByProject,
+  saveAuditComment,
+  AuditComment,
+} from '@/services/audit_comments'
 
 type DateRange = {
   from: Date | undefined
@@ -198,11 +221,22 @@ const HighlightedText = ({ text, highlight }: { text: string; highlight: string 
 export default function Razao() {
   const navigate = useNavigate()
   const { accountId } = useParams()
+  const { user } = useAuth()
 
   const [date, setDate] = useState<DateRange | undefined>()
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [showOnlyCommented, setShowOnlyCommented] = useState(false)
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
+
+  const [projectId, setProjectId] = useState<string | null>(null)
+  const [comments, setComments] = useState<Record<string, AuditComment>>({})
+  const [isCommentModalOpen, setIsCommentModalOpen] = useState(false)
+  const [selectedEntryForComment, setSelectedEntryForComment] = useState<
+    (typeof DATA_WITH_IDS)[0] | null
+  >(null)
+  const [currentCommentText, setCurrentCommentText] = useState('')
+  const [isSavingComment, setIsSavingComment] = useState(false)
 
   const accountInfo = {
     codigo: accountId || '101907',
@@ -210,6 +244,51 @@ export default function Razao() {
     saldoInicial: '11.256,49 D',
     saldoFinal: '10.059,26 D',
   }
+
+  // Fetch project context
+  useEffect(() => {
+    if (user?.id) {
+      pb.collection('projects')
+        .getFirstListItem(`user_id = "${user.id}"`)
+        .then((p) => setProjectId(p.id))
+        .catch(() => setProjectId(null))
+    }
+  }, [user])
+
+  // Fetch comments
+  useEffect(() => {
+    if (projectId) {
+      getAuditCommentsByProject(projectId).then((list) => {
+        const map: Record<string, AuditComment> = {}
+        list.forEach((c) => {
+          map[c.entry_reference] = c
+        })
+        setComments(map)
+      })
+    }
+  }, [projectId])
+
+  // Real-time comments update
+  useRealtime(
+    'audit_comments',
+    (e) => {
+      if (e.record.project_id !== projectId) return
+
+      if (e.action === 'create' || e.action === 'update') {
+        setComments((prev) => ({
+          ...prev,
+          [e.record.entry_reference]: e.record as unknown as AuditComment,
+        }))
+      } else if (e.action === 'delete') {
+        setComments((prev) => {
+          const next = { ...prev }
+          delete next[e.record.entry_reference]
+          return next
+        })
+      }
+    },
+    !!projectId,
+  )
 
   const filteredEntries = useMemo(() => {
     let entries = DATA_WITH_IDS.filter((r) => r.codigoConta === accountInfo.codigo)
@@ -232,8 +311,12 @@ export default function Razao() {
       entries = entries.filter((r) => r.dc === typeFilter)
     }
 
+    if (showOnlyCommented) {
+      entries = entries.filter((r) => !!comments[r.id])
+    }
+
     return entries
-  }, [accountInfo.codigo, date, searchQuery, typeFilter])
+  }, [accountInfo.codigo, date, searchQuery, typeFilter, showOnlyCommented, comments])
 
   const toggleExpand = (id: string) => {
     setExpandedRows((prev) => {
@@ -242,6 +325,57 @@ export default function Razao() {
       else newSet.add(id)
       return newSet
     })
+  }
+
+  const handleOpenCommentModal = (e: React.MouseEvent, row: (typeof DATA_WITH_IDS)[0]) => {
+    e.stopPropagation()
+    setSelectedEntryForComment(row)
+    setCurrentCommentText(comments[row.id]?.comment || '')
+    setIsCommentModalOpen(true)
+  }
+
+  const handleSaveComment = async () => {
+    if (!projectId || !user || !selectedEntryForComment) {
+      toast.error('Contexto de projeto ou usuário não encontrado.')
+      return
+    }
+
+    if (!currentCommentText.trim()) {
+      // If empty, delete existing comment if there is one
+      if (comments[selectedEntryForComment.id]?.id) {
+        setIsSavingComment(true)
+        try {
+          await pb.collection('audit_comments').delete(comments[selectedEntryForComment.id]!.id!)
+          toast.success('Comentário removido.')
+          setIsCommentModalOpen(false)
+        } catch (err) {
+          toast.error('Erro ao remover comentário.')
+        } finally {
+          setIsSavingComment(false)
+        }
+      } else {
+        setIsCommentModalOpen(false)
+      }
+      return
+    }
+
+    setIsSavingComment(true)
+    try {
+      const existing = comments[selectedEntryForComment.id]
+      await saveAuditComment({
+        id: existing?.id,
+        project_id: projectId,
+        entry_reference: selectedEntryForComment.id,
+        comment: currentCommentText,
+        user_id: user.id,
+      })
+      toast.success('Comentário salvo com sucesso!')
+      setIsCommentModalOpen(false)
+    } catch (err) {
+      toast.error('Erro ao salvar comentário.')
+    } finally {
+      setIsSavingComment(false)
+    }
   }
 
   return (
@@ -365,6 +499,20 @@ export default function Razao() {
             <SelectItem value="C">Crédito (C)</SelectItem>
           </SelectContent>
         </Select>
+
+        <div
+          className="flex items-center space-x-2 bg-background border px-3 py-2 rounded-md h-10 w-full sm:w-auto"
+          title="Mostrar apenas lançamentos com comentários de auditoria"
+        >
+          <Switch
+            id="show-commented"
+            checked={showOnlyCommented}
+            onCheckedChange={setShowOnlyCommented}
+          />
+          <Label htmlFor="show-commented" className="text-sm cursor-pointer whitespace-nowrap">
+            Comentários
+          </Label>
+        </div>
       </div>
 
       {/* Transactions Table */}
@@ -381,12 +529,13 @@ export default function Razao() {
               <TableHead className="w-[150px] text-right">Saldo</TableHead>
               <TableHead>Histórico</TableHead>
               <TableHead className="w-[100px] text-right">Número</TableHead>
+              <TableHead className="w-[80px] text-center">Auditoria</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredEntries.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
                   Nenhum lançamento encontrado para os filtros aplicados.
                 </TableCell>
               </TableRow>
@@ -396,6 +545,7 @@ export default function Razao() {
                 const counterparts = DATA_WITH_IDS.filter(
                   (r) => r.numero === row.numero && r.codigoConta !== row.codigoConta,
                 )
+                const hasComment = !!comments[row.id]
 
                 return (
                   <Fragment key={row.id}>
@@ -404,6 +554,7 @@ export default function Razao() {
                         'transition-colors py-1 h-10',
                         counterparts.length > 0 && 'cursor-pointer hover:bg-muted/50',
                         isExpanded && 'bg-muted/30 font-medium',
+                        hasComment && 'bg-blue-50/30',
                       )}
                       onClick={() => counterparts.length > 0 && toggleExpand(row.id)}
                     >
@@ -449,15 +600,36 @@ export default function Razao() {
                         title={row.historico}
                       >
                         <HighlightedText text={row.historico} highlight={searchQuery} />
+                        {hasComment && (
+                          <div className="mt-1 text-xs text-blue-600 flex items-start gap-1">
+                            <MessageSquare className="w-3 h-3 mt-0.5 shrink-0" />
+                            <span className="line-clamp-1 italic">{comments[row.id].comment}</span>
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell className="py-2 text-sm text-right font-mono text-muted-foreground">
                         {row.numero}
+                      </TableCell>
+                      <TableCell className="py-2 text-center">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className={cn('h-8 w-8', hasComment && 'bg-blue-100 hover:bg-blue-200')}
+                          onClick={(e) => handleOpenCommentModal(e, row)}
+                          title="Comentário de Auditoria"
+                        >
+                          {hasComment ? (
+                            <MessageSquare className="h-4 w-4 text-blue-600 fill-blue-100" />
+                          ) : (
+                            <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
+                          )}
+                        </Button>
                       </TableCell>
                     </TableRow>
 
                     {isExpanded && counterparts.length > 0 && (
                       <TableRow className="bg-muted/10 border-b">
-                        <TableCell colSpan={9} className="p-0">
+                        <TableCell colSpan={10} className="p-0">
                           <div className="pl-12 pr-4 py-4 text-sm animate-fade-in-down bg-muted/5 border-t shadow-[inset_0_4px_6px_-6px_rgba(0,0,0,0.1)]">
                             <div className="font-semibold mb-3 text-muted-foreground flex items-center gap-2">
                               <ArrowRightLeft className="w-4 h-4" /> Contrapartidas do Lançamento{' '}
@@ -515,6 +687,70 @@ export default function Razao() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Audit Comment Modal */}
+      <Dialog open={isCommentModalOpen} onOpenChange={setIsCommentModalOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Comentário de Auditoria</DialogTitle>
+            <DialogDescription>
+              Adicione ou edite suas observações para este lançamento.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedEntryForComment && (
+            <div className="text-sm bg-muted/50 p-3 rounded-md mb-2 space-y-1.5 border">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Data:</span>
+                <span className="font-medium">{selectedEntryForComment.data}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Conta:</span>
+                <span className="font-medium">
+                  {selectedEntryForComment.codigoConta} - {selectedEntryForComment.conta}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Valor:</span>
+                <span
+                  className={cn(
+                    'font-medium',
+                    selectedEntryForComment.dc === 'D' ? 'text-blue-600' : 'text-red-600',
+                  )}
+                >
+                  {formatNum(selectedEntryForComment.valor)} ({selectedEntryForComment.dc})
+                </span>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2 py-2">
+            <Label htmlFor="audit-comment" className="sr-only">
+              Comentário
+            </Label>
+            <Textarea
+              id="audit-comment"
+              placeholder="Digite suas observações aqui..."
+              value={currentCommentText}
+              onChange={(e) => setCurrentCommentText(e.target.value)}
+              className="min-h-[140px] resize-none"
+            />
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIsCommentModalOpen(false)}
+              disabled={isSavingComment}
+            >
+              Cancelar
+            </Button>
+            <Button onClick={handleSaveComment} disabled={isSavingComment}>
+              {isSavingComment ? 'Salvando...' : 'Salvar Comentário'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

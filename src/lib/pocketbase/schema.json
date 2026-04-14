@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-14T14:17:29.587Z",
+  "generatedAt": "2026-04-14T14:31:28.922Z",
   "collections": [
     {
       "name": "users",
@@ -150,6 +150,63 @@
         }
       ],
       "indexes": ["CREATE INDEX idx_documents_project_id ON documents (project_id)"]
+    },
+    {
+      "name": "audit_comments",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && project_id.user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "project_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "entry_reference",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "comment",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_audit_comments_project ON audit_comments (project_id)",
+        "CREATE INDEX idx_audit_comments_entry ON audit_comments (entry_reference)"
+      ]
     }
   ]
 }
