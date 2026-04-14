@@ -1,6 +1,15 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FileText, Table as TableIcon, FileDown, Search, Filter, Settings2, X } from 'lucide-react'
+import {
+  FileText,
+  Table as TableIcon,
+  FileDown,
+  Search,
+  Filter,
+  Settings2,
+  X,
+  Loader2,
+} from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -19,192 +28,14 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-
-// Mock Data representing the Trial Balance
-const MOCK_DATA = [
-  {
-    nivel: 1,
-    codigo: '10000',
-    conta: 'ATIVO',
-    tipo: 'S',
-    saldoInicial: 94432747.51,
-    dcInicial: 'D',
-    totalDebitos: 321989481.47,
-    totalCreditos: 294987504.89,
-    saldoFinal: 121434724.09,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 2,
-    codigo: '10001',
-    conta: 'CIRCULANTE',
-    tipo: 'S',
-    saldoInicial: 7222944.63,
-    dcInicial: 'D',
-    totalDebitos: 275363018.07,
-    totalCreditos: 277660888.08,
-    saldoFinal: 4925074.62,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 3,
-    codigo: '10002',
-    conta: 'DISPONIVEL',
-    tipo: 'S',
-    saldoInicial: 5282248.82,
-    dcInicial: 'D',
-    totalDebitos: 217719505.83,
-    totalCreditos: 219904672.33,
-    saldoFinal: 3097082.32,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 4,
-    codigo: '10009',
-    conta: 'BANCOS',
-    tipo: 'S',
-    saldoInicial: 1372383.54,
-    dcInicial: 'D',
-    totalDebitos: 179459868.19,
-    totalCreditos: 180774078.54,
-    saldoFinal: 58173.19,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 5,
-    codigo: '10010',
-    conta: 'BANCOS CONTA MOVIMENTO',
-    tipo: 'S',
-    saldoInicial: 1372383.54,
-    dcInicial: 'D',
-    totalDebitos: 179445763.14,
-    totalCreditos: 180759973.49,
-    saldoFinal: 58173.19,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 6,
-    codigo: '10011',
-    conta: 'ITAU AG0188 CC 99635-9',
-    tipo: 'A',
-    saldoInicial: 10.0,
-    dcInicial: 'D',
-    totalDebitos: 98310460.26,
-    totalCreditos: 98309868.86,
-    saldoFinal: 601.4,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 6,
-    codigo: '12606',
-    conta: 'UY3 - AG 001 - CC 37508474',
-    tipo: 'A',
-    saldoInicial: 1162597.35,
-    dcInicial: 'D',
-    totalDebitos: 56111683.07,
-    totalCreditos: 57216708.63,
-    saldoFinal: 57571.79,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 6,
-    codigo: 'SCROW',
-    conta: 'SCROW',
-    tipo: 'A',
-    saldoInicial: 209776.19,
-    dcInicial: 'D',
-    totalDebitos: 23929590.79,
-    totalCreditos: 24139366.98,
-    saldoFinal: 0.0,
-    dcFinal: '',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 4,
-    codigo: '10013',
-    conta: 'APLICAÇÕES',
-    tipo: 'S',
-    saldoInicial: 3812140.94,
-    dcInicial: 'D',
-    totalDebitos: 38186597.64,
-    totalCreditos: 38959864.32,
-    saldoFinal: 3038874.26,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 5,
-    codigo: '10014',
-    conta: 'APLICAÇÕES DE LIQUIDEZ IMEDIATA',
-    tipo: 'S',
-    saldoInicial: 619745.43,
-    dcInicial: 'D',
-    totalDebitos: 37770026.68,
-    totalCreditos: 38389240.23,
-    saldoFinal: 531.88,
-    dcFinal: 'D',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 6,
-    codigo: '101907',
-    conta: 'APLICAÇÃO ITAÚ PRIVILEGE RF',
-    tipo: 'A',
-    saldoInicial: 515268.66,
-    dcInicial: 'D',
-    totalDebitos: 19160044.91,
-    totalCreditos: 19675313.57,
-    saldoFinal: 0.0,
-    dcFinal: '',
-    categoria: 'Ativo',
-  },
-  {
-    nivel: 1,
-    codigo: '20000',
-    conta: 'PASSIVO',
-    tipo: 'S',
-    saldoInicial: 80000000.0,
-    dcInicial: 'C',
-    totalDebitos: 150000000.0,
-    totalCreditos: 170000000.0,
-    saldoFinal: 100000000.0,
-    dcFinal: 'C',
-    categoria: 'Passivo',
-  },
-  {
-    nivel: 2,
-    codigo: '20001',
-    conta: 'CIRCULANTE',
-    tipo: 'S',
-    saldoInicial: 30000000.0,
-    dcInicial: 'C',
-    totalDebitos: 50000000.0,
-    totalCreditos: 60000000.0,
-    saldoFinal: 40000000.0,
-    dcFinal: 'C',
-    categoria: 'Passivo',
-  },
-  {
-    nivel: 3,
-    codigo: '20002',
-    conta: 'FORNECEDORES',
-    tipo: 'S',
-    saldoInicial: 15000000.0,
-    dcInicial: 'C',
-    totalDebitos: 20000000.0,
-    totalCreditos: 25000000.0,
-    saldoFinal: 20000000.0,
-    dcFinal: 'C',
-    categoria: 'Passivo',
-  },
-]
+import {
+  getAccountingProjects,
+  getAccounts,
+  getEntryItems,
+  Account,
+  EntryItem,
+} from '@/services/accounting'
+import { useRealtime } from '@/hooks/use-realtime'
 
 const formatNum = (val: number) =>
   new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
@@ -215,8 +46,126 @@ export default function Balancete() {
   const [category, setCategory] = useState<string>('all')
   const [maxNivel, setMaxNivel] = useState('20')
 
+  const [projects, setProjects] = useState<any[]>([])
+  const [selectedProjectId, setSelectedProjectId] = useState<string>('')
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [items, setItems] = useState<EntryItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    getAccountingProjects()
+      .then((data) => {
+        setProjects(data)
+        if (data.length > 0) {
+          setSelectedProjectId(data[0].id)
+        } else {
+          setLoading(false)
+        }
+      })
+      .catch(() => setLoading(false))
+  }, [])
+
+  const loadData = async (projectId: string) => {
+    setLoading(true)
+    try {
+      const [accs, entryItems] = await Promise.all([
+        getAccounts(projectId),
+        getEntryItems(projectId),
+      ])
+      setAccounts(accs)
+      setItems(entryItems)
+    } catch (e) {
+      console.error(e)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      loadData(selectedProjectId)
+    }
+  }, [selectedProjectId])
+
+  useRealtime('accounts', () => {
+    if (selectedProjectId) loadData(selectedProjectId)
+  })
+  useRealtime('entry_items', () => {
+    if (selectedProjectId) loadData(selectedProjectId)
+  })
+  useRealtime('journal_entries', () => {
+    if (selectedProjectId) loadData(selectedProjectId)
+  })
+
+  const processedData = useMemo(() => {
+    const rows = accounts.map((acc) => {
+      const accountItems = items.filter((i) => i.account_id === acc.id)
+      let periodDebits = 0
+      let periodCredits = 0
+
+      accountItems.forEach((item) => {
+        if (item.type === 'debit') periodDebits += item.value
+        if (item.type === 'credit') periodCredits += item.value
+      })
+
+      return {
+        ...acc,
+        directDebits: periodDebits,
+        directCredits: periodCredits,
+      }
+    })
+
+    const finalRows = rows.map((acc) => {
+      const children = rows.filter((r) => r.code.startsWith(acc.code))
+
+      let totalDebitos = 0
+      let totalCreditos = 0
+
+      children.forEach((child) => {
+        totalDebitos += child.directDebits
+        totalCreditos += child.directCredits
+      })
+
+      let finalBalance = totalDebitos - totalCreditos
+      const isCreditNormal =
+        acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
+
+      if (isCreditNormal) {
+        finalBalance = totalCreditos - totalDebitos
+      }
+
+      const isAnalytical = !rows.some((r) => r.code !== acc.code && r.code.startsWith(acc.code))
+
+      return {
+        id: acc.id,
+        nivel: acc.code.split('.').length,
+        codigo: acc.code,
+        conta: acc.name,
+        tipo: isAnalytical ? 'A' : 'S',
+        saldoInicial: 0,
+        dcInicial: '',
+        totalDebitos,
+        totalCreditos,
+        saldoFinal: Math.abs(finalBalance),
+        dcFinal:
+          finalBalance === 0
+            ? ''
+            : isCreditNormal
+              ? finalBalance > 0
+                ? 'C'
+                : 'D'
+              : finalBalance > 0
+                ? 'D'
+                : 'C',
+        categoria: acc.type,
+      }
+    })
+
+    return finalRows
+  }, [accounts, items])
+
   const filteredData = useMemo(() => {
-    return MOCK_DATA.filter((row) => {
+    return processedData.filter((row) => {
       const matchesSearch =
         row.conta.toLowerCase().includes(searchTerm.toLowerCase()) ||
         row.codigo.toLowerCase().includes(searchTerm.toLowerCase())
@@ -225,7 +174,7 @@ export default function Balancete() {
       const matchesNivel = row.nivel <= parseInt(maxNivel || '20', 10)
       return matchesSearch && matchesCategory && matchesNivel
     })
-  }, [searchTerm, category, maxNivel])
+  }, [processedData, searchTerm, category, maxNivel])
 
   const getRowStyle = (nivel: number, tipo: string) => {
     if (nivel === 1) return 'bg-primary text-primary-foreground font-bold hover:bg-primary/90'
@@ -239,9 +188,23 @@ export default function Balancete() {
     <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card p-4 rounded-lg border shadow-sm gap-4">
-        <h2 className="text-lg font-bold text-foreground truncate">
-          Balancete - NION ENERGIA S.A. (45832752000157) 2023
-        </h2>
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+          <h2 className="text-lg font-bold text-foreground">Balancete</h2>
+          {projects.length > 0 && (
+            <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
+              <SelectTrigger className="w-[280px] h-8 font-semibold">
+                <SelectValue placeholder="Selecione um projeto" />
+              </SelectTrigger>
+              <SelectContent>
+                {projects.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>
+                    {p.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
           <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
@@ -273,22 +236,9 @@ export default function Balancete() {
           </div>
 
           <div className="flex items-center gap-2 border-l pl-2 ml-2">
-            <span className="text-sm whitespace-nowrap hidden md:inline">
-              01/01/2023 a 31/12/2023
-            </span>
+            <span className="text-sm whitespace-nowrap hidden md:inline">Período Completo</span>
             <Button variant="outline" size="sm" className="h-8 whitespace-nowrap">
-              Alterar Período
-            </Button>
-          </div>
-
-          <div className="flex items-center gap-2 border-l pl-2 ml-2">
-            <Button variant="secondary" size="sm" className="h-8">
-              <Settings2 className="h-4 w-4 mr-2" />
-              Opções
-            </Button>
-            <Button variant="ghost" size="sm" className="h-8">
-              <X className="h-4 w-4 mr-2" />
-              Fechar
+              Alterar
             </Button>
           </div>
         </div>
@@ -313,11 +263,11 @@ export default function Balancete() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todas as Categorias</SelectItem>
-              <SelectItem value="ativo">Ativo</SelectItem>
-              <SelectItem value="passivo">Passivo</SelectItem>
-              <SelectItem value="patrimonio">Patrimônio Líquido</SelectItem>
-              <SelectItem value="receita">Receita</SelectItem>
-              <SelectItem value="despesa">Despesa</SelectItem>
+              <SelectItem value="asset">Ativo</SelectItem>
+              <SelectItem value="liability">Passivo</SelectItem>
+              <SelectItem value="equity">Patrimônio Líquido</SelectItem>
+              <SelectItem value="revenue">Receita</SelectItem>
+              <SelectItem value="expense">Despesa</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -341,10 +291,19 @@ export default function Balancete() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredData.length === 0 ? (
+            {loading ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
-                  Nenhuma conta encontrada com os filtros atuais.
+                <TableCell colSpan={10} className="h-32 text-center">
+                  <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
+                    <Loader2 className="h-6 w-6 animate-spin" />
+                    <span>Carregando dados financeiros...</span>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : filteredData.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
+                  Nenhum dado financeiro encontrado para este projeto.
                 </TableCell>
               </TableRow>
             ) : (

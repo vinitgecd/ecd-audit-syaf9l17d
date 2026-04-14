@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-14T18:42:38.756Z",
+  "generatedAt": "2026-04-14T18:53:06.949Z",
   "collections": [
     {
       "name": "users",
@@ -277,6 +277,177 @@
       "indexes": [
         "CREATE INDEX idx_audit_logs_comment ON audit_logs (comment_id)",
         "CREATE INDEX idx_audit_logs_project ON audit_logs (project_id)"
+      ]
+    },
+    {
+      "name": "accounts",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && project_id.user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "project_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["asset", "liability", "equity", "revenue", "expense"]
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_accounts_project ON accounts (project_id)",
+        "CREATE INDEX idx_accounts_code ON accounts (code)"
+      ]
+    },
+    {
+      "name": "journal_entries",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && project_id.user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "project_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "date",
+          "type": "date",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "description",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "reference",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_journal_entries_project ON journal_entries (project_id)",
+        "CREATE INDEX idx_journal_entries_date ON journal_entries (date)"
+      ]
+    },
+    {
+      "name": "entry_items",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && entry_id.project_id.user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && entry_id.project_id.user_id = @request.auth.id",
+        "create": "@request.auth.id != ''",
+        "update": "@request.auth.id != ''",
+        "delete": "@request.auth.id != ''"
+      },
+      "fields": [
+        {
+          "name": "entry_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "journal_entries"
+        },
+        {
+          "name": "account_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "accounts"
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["debit", "credit"]
+        },
+        {
+          "name": "value",
+          "type": "number",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_entry_items_entry ON entry_items (entry_id)",
+        "CREATE INDEX idx_entry_items_account ON entry_items (account_id)"
       ]
     }
   ]
