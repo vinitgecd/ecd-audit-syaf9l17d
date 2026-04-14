@@ -25,6 +25,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AlertCircle } from 'lucide-react'
 
 const monthlyData = [
   { name: 'Jan', receitas: 4000, despesas: 2400 },
