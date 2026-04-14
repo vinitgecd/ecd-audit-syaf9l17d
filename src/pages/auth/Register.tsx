@@ -14,6 +14,7 @@ export default function Register() {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const { toast } = useToast()
 
@@ -23,6 +24,16 @@ export default function Register() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (password !== confirmPassword) {
+      toast({
+        variant: 'destructive',
+        title: 'Senhas não conferem',
+        description: 'A senha e a confirmação de senha devem ser iguais.',
+      })
+      return
+    }
+
     setLoading(true)
     const { error } = await signUp(name, email, password)
     if (error) {
@@ -83,6 +94,18 @@ export default function Register() {
                 placeholder="No mínimo 8 caracteres"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={8}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+              <Input
+                id="confirmPassword"
+                type="password"
+                placeholder="Repita sua senha"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 minLength={8}
               />

@@ -1,4 +1,4 @@
-import { Link, Outlet, useLocation } from 'react-router-dom'
+import { Link, Outlet, useLocation, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import {
   Sidebar,
@@ -39,7 +39,7 @@ export default function Layout() {
   const { user, signOut } = useAuth()
   const location = useLocation()
 
-  if (!user) return <Outlet />
+  if (!user) return <Navigate to="/login" replace />
 
   const navItems = [
     { title: 'Dashboard', url: '/', icon: LayoutDashboard },

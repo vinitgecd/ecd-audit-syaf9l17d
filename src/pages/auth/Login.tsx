@@ -27,7 +27,8 @@ export default function Login() {
       toast({
         variant: 'destructive',
         title: 'Erro no login',
-        description: 'Credenciais inválidas. Tente novamente.',
+        description:
+          error?.response?.message || 'Credenciais inválidas ou erro de conexão. Tente novamente.',
       })
     }
     setLoading(false)
