@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { FileText, Table as TableIcon, FileDown, Search, Filter, Settings2, X } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -209,6 +210,7 @@ const formatNum = (val: number) =>
   new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
 
 export default function Balancete() {
+  const navigate = useNavigate()
   const [searchTerm, setSearchTerm] = useState('')
   const [category, setCategory] = useState<string>('all')
   const [maxNivel, setMaxNivel] = useState('20')
@@ -350,9 +352,10 @@ export default function Balancete() {
                 <TableRow
                   key={`${row.codigo}-${idx}`}
                   className={cn(
-                    'cursor-pointer transition-colors py-1 h-10',
+                    'cursor-pointer transition-colors py-1 h-10 hover:bg-muted/80',
                     getRowStyle(row.nivel, row.tipo),
                   )}
+                  onClick={() => navigate(`/balancete/${row.codigo}/razao`)}
                 >
                   <TableCell className="py-2">{row.nivel}</TableCell>
                   <TableCell className="py-2 font-mono text-xs">{row.codigo}</TableCell>
