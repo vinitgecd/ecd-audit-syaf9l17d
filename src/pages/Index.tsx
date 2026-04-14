@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { Link, Navigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,9 +12,8 @@ export default function Index() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
 
-  if (!user) return <Navigate to="/login" replace />
-
-  const fetchProjects = async () => {
+  const fetchProjects = useCallback(async () => {
+    if (!user) return
     try {
       const data = await getProjects()
       setProjects(data)
@@ -23,15 +22,21 @@ export default function Index() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
     fetchProjects()
-  }, [])
+  }, [fetchProjects])
 
-  useRealtime('projects', () => {
-    fetchProjects()
-  })
+  useRealtime(
+    'projects',
+    () => {
+      fetchProjects()
+    },
+    !!user,
+  )
+
+  if (!user) return <Navigate to="/login" replace />
 
   const activeProjects = projects.filter((p) => p.status === 'active').length
   const completedProjects = projects.filter((p) => p.status === 'completed').length
