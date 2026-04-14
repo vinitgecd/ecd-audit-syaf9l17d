@@ -1,6 +1,4 @@
-import { useEffect, useState } from 'react'
-import { getProjects, createProject, Project } from '@/services/projects'
-import { useRealtime } from '@/hooks/use-realtime'
+import { useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Table,
@@ -13,7 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, Plus, Loader2 } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -23,6 +21,16 @@ import {
   DialogTitle,
   DialogTrigger,
 } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -35,11 +43,50 @@ import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
+export interface MockProject {
+  id: string
+  name: string
+  client: string
+  status: 'active' | 'archived' | 'completed'
+  created: string
+  updated: string
+}
+
+const initialProjects: MockProject[] = [
+  {
+    id: '1',
+    name: 'Auditoria Fiscal 2024',
+    client: 'TechCorp Ltda',
+    status: 'active',
+    created: new Date(Date.now() - 86400000 * 5).toISOString(),
+    updated: new Date().toISOString(),
+  },
+  {
+    id: '2',
+    name: 'Revisão Contábil Q3',
+    client: 'Indústria XPTO',
+    status: 'completed',
+    created: new Date(Date.now() - 86400000 * 30).toISOString(),
+    updated: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+  {
+    id: '3',
+    name: 'Due Diligence - Aquisição',
+    client: 'Investimentos Alpha',
+    status: 'archived',
+    created: new Date(Date.now() - 86400000 * 90).toISOString(),
+    updated: new Date(Date.now() - 86400000 * 15).toISOString(),
+  },
+]
+
 export default function Projects() {
-  const [projects, setProjects] = useState<Project[]>([])
-  const [loading, setLoading] = useState(true)
+  const [projects, setProjects] = useState<MockProject[]>(initialProjects)
   const [search, setSearch] = useState('')
-  const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [isEditOpen, setIsEditOpen] = useState(false)
+  const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
+  const [editingProject, setEditingProject] = useState<MockProject | null>(null)
+
   const { toast } = useToast()
 
   const [formData, setFormData] = useState({
@@ -48,33 +95,46 @@ export default function Projects() {
     status: 'active' as const,
   })
 
-  const fetchProjects = async () => {
-    try {
-      const data = await getProjects()
-      setProjects(data)
-    } finally {
-      setLoading(false)
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault()
+    const newProject: MockProject = {
+      id: Math.random().toString(36).substring(2, 9),
+      name: formData.name,
+      client: formData.client,
+      status: formData.status,
+      created: new Date().toISOString(),
+      updated: new Date().toISOString(),
     }
+    setProjects([newProject, ...projects])
+    setIsCreateOpen(false)
+    setFormData({ name: '', client: '', status: 'active' })
+    toast({ title: 'Sucesso', description: 'Projeto criado com sucesso.' })
   }
 
-  useEffect(() => {
-    fetchProjects()
-  }, [])
+  const handleEdit = (project: MockProject) => {
+    setEditingProject(project)
+    setIsEditOpen(true)
+  }
 
-  useRealtime('projects', () => {
-    fetchProjects()
-  })
-
-  const handleCreate = async (e: React.FormEvent) => {
+  const handleUpdate = (e: React.FormEvent) => {
     e.preventDefault()
-    try {
-      await createProject(formData)
-      setIsDialogOpen(false)
-      setFormData({ name: '', client: '', status: 'active' })
-      toast({ title: 'Sucesso', description: 'Projeto criado com sucesso.' })
-    } catch (err: any) {
-      toast({ variant: 'destructive', title: 'Erro', description: err.message })
-    }
+    if (!editingProject) return
+
+    setProjects(
+      projects.map((p) =>
+        p.id === editingProject.id ? { ...editingProject, updated: new Date().toISOString() } : p,
+      ),
+    )
+    setIsEditOpen(false)
+    setEditingProject(null)
+    toast({ title: 'Sucesso', description: 'Projeto atualizado com sucesso.' })
+  }
+
+  const handleDelete = () => {
+    if (!projectToDelete) return
+    setProjects(projects.filter((p) => p.id !== projectToDelete))
+    setProjectToDelete(null)
+    toast({ title: 'Sucesso', description: 'Projeto removido com sucesso.' })
   }
 
   const filteredProjects = projects.filter(
@@ -112,7 +172,7 @@ export default function Projects() {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
             <DialogTrigger asChild>
               <Button className="shrink-0 gap-2">
                 <Plus className="h-4 w-4" /> Novo Projeto
@@ -162,7 +222,7 @@ export default function Projects() {
                 </div>
               </form>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
                   Cancelar
                 </Button>
                 <Button type="submit" form="create-project">
@@ -174,11 +234,7 @@ export default function Projects() {
         </div>
       </CardHeader>
       <CardContent>
-        {loading ? (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-          </div>
-        ) : filteredProjects.length === 0 ? (
+        {filteredProjects.length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">Nenhum projeto encontrado.</div>
         ) : (
           <Table>
@@ -187,7 +243,8 @@ export default function Projects() {
                 <TableHead>Nome</TableHead>
                 <TableHead>Cliente</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Modificado em</TableHead>
+                <TableHead>Criado em</TableHead>
+                <TableHead className="text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -201,7 +258,29 @@ export default function Projects() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">
-                    {format(new Date(project.updated), "dd 'de' MMM, yyyy", { locale: ptBR })}
+                    {format(new Date(project.created), "dd 'de' MMM, yyyy", { locale: ptBR })}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => handleEdit(project)}
+                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                      >
+                        <Pencil className="h-4 w-4" />
+                        <span className="sr-only">Editar</span>
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => setProjectToDelete(project.id)}
+                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        <span className="sr-only">Excluir</span>
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -209,6 +288,84 @@ export default function Projects() {
           </Table>
         )}
       </CardContent>
+
+      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Projeto</DialogTitle>
+            <DialogDescription>Atualize os detalhes do projeto de auditoria.</DialogDescription>
+          </DialogHeader>
+          {editingProject && (
+            <form id="edit-project" onSubmit={handleUpdate} className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Nome do Projeto</Label>
+                <Input
+                  id="edit-name"
+                  value={editingProject.name}
+                  onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-client">Cliente</Label>
+                <Input
+                  id="edit-client"
+                  value={editingProject.client}
+                  onChange={(e) => setEditingProject({ ...editingProject, client: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-status">Status</Label>
+                <Select
+                  value={editingProject.status}
+                  onValueChange={(v: any) => setEditingProject({ ...editingProject, status: v })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="active">Ativo</SelectItem>
+                    <SelectItem value="completed">Concluído</SelectItem>
+                    <SelectItem value="archived">Arquivado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </form>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+              Cancelar
+            </Button>
+            <Button type="submit" form="edit-project">
+              Salvar Alterações
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog
+        open={!!projectToDelete}
+        onOpenChange={(open) => !open && setProjectToDelete(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Excluir Projeto</AlertDialogTitle>
+            <AlertDialogDescription>
+              Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   )
 }
