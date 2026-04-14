@@ -13,6 +13,7 @@ import Analysis from './pages/Analysis'
 import Balancete from './pages/Balancete'
 import Documents from './pages/Documents'
 import Razao from './pages/Razao'
+import Pending from './pages/Pending'
 import NotFound from './pages/NotFound'
 
 const App = () => (
@@ -31,6 +32,7 @@ const App = () => (
             <Route path="/balancete" element={<Balancete />} />
             <Route path="/balancete/:accountId/razao" element={<Razao />} />
             <Route path="/documents" element={<Documents />} />
+            <Route path="/pending" element={<Pending />} />
           </Route>
           <Route path="*" element={<NotFound />} />
         </Routes>

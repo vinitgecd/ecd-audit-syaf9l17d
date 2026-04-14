@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-14T14:44:01.467Z",
+  "generatedAt": "2026-04-14T15:00:14.477Z",
   "collections": [
     {
       "name": "users",
@@ -213,6 +213,70 @@
       "indexes": [
         "CREATE INDEX idx_audit_comments_project ON audit_comments (project_id)",
         "CREATE INDEX idx_audit_comments_entry ON audit_comments (entry_reference)"
+      ]
+    },
+    {
+      "name": "audit_logs",
+      "type": "base",
+      "apiRules": {
+        "list": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "create": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "update": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "delete": "@request.auth.id != '' && project_id.user_id = @request.auth.id"
+      },
+      "fields": [
+        {
+          "name": "project_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "comment_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "audit_comments"
+        },
+        {
+          "name": "user_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "users"
+        },
+        {
+          "name": "action",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "details",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        }
+      ],
+      "indexes": [
+        "CREATE INDEX idx_audit_logs_comment ON audit_logs (comment_id)",
+        "CREATE INDEX idx_audit_logs_project ON audit_logs (project_id)"
       ]
     }
   ]

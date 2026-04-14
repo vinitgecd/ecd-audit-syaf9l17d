@@ -28,3 +28,29 @@ export const saveAuditComment = async (data: Partial<AuditComment>) => {
 export const deleteAuditComment = async (id: string) => {
   return pb.collection('audit_comments').delete(id)
 }
+
+export interface AuditLog {
+  id?: string
+  project_id: string
+  comment_id: string
+  user_id: string
+  action: string
+  details?: string
+  created?: string
+  updated?: string
+  expand?: {
+    user_id: { name: string; email: string }
+  }
+}
+
+export const getAuditLogsByComment = async (commentId: string) => {
+  return pb.collection('audit_logs').getFullList<AuditLog>({
+    filter: `comment_id = "${commentId}"`,
+    sort: '-created',
+    expand: 'user_id',
+  })
+}
+
+export const createAuditLog = async (data: Partial<AuditLog>) => {
+  return pb.collection('audit_logs').create<AuditLog>(data)
+}

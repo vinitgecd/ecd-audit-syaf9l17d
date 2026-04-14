@@ -14,7 +14,6 @@ import {
 } from 'lucide-react'
 import { format, parse, startOfDay, endOfDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
-import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -36,29 +35,15 @@ import {
 } from '@/components/ui/select'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Calendar } from '@/components/ui/calendar'
-import { Switch } from '@/components/ui/switch'
-import { Label } from '@/components/ui/label'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
-import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import pb from '@/lib/pocketbase/client'
-import {
-  getAuditCommentsByProject,
-  saveAuditComment,
-  AuditComment,
-} from '@/services/audit_comments'
+import { getAuditCommentsByProject, AuditComment } from '@/services/audit_comments'
 import { DATA_WITH_IDS } from '@/lib/mock-data'
+import { AuditCommentModal } from '@/components/AuditCommentModal'
 
 type DateRange = {
   from: Date | undefined
@@ -97,18 +82,16 @@ export default function Razao() {
   const [date, setDate] = useState<DateRange | undefined>()
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('all')
-  const [showOnlyCommented, setShowOnlyCommented] = useState(false)
+  const [statusFilter, setStatusFilter] = useState<string>('all')
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   const [projectId, setProjectId] = useState<string | null>(null)
   const [comments, setComments] = useState<Record<string, AuditComment>>({})
+
   const [isCommentModalOpen, setIsCommentModalOpen] = useState(false)
   const [selectedEntryForComment, setSelectedEntryForComment] = useState<
     (typeof DATA_WITH_IDS)[0] | null
   >(null)
-  const [currentCommentText, setCurrentCommentText] = useState('')
-  const [currentStatus, setCurrentStatus] = useState<'pending' | 'approved' | 'rejected'>('pending')
-  const [isSavingComment, setIsSavingComment] = useState(false)
 
   const accountInfo = {
     codigo: accountId || '101907',
@@ -180,12 +163,16 @@ export default function Razao() {
       entries = entries.filter((r) => r.dc === typeFilter)
     }
 
-    if (showOnlyCommented) {
-      entries = entries.filter((r) => !!comments[r.id])
+    if (statusFilter !== 'all') {
+      entries = entries.filter((r) => {
+        const c = comments[r.id]
+        if (!c) return false
+        return c.status === statusFilter
+      })
     }
 
     return entries
-  }, [accountInfo.codigo, date, searchQuery, typeFilter, showOnlyCommented, comments])
+  }, [accountInfo.codigo, date, searchQuery, typeFilter, statusFilter, comments])
 
   const toggleExpand = (id: string) => {
     setExpandedRows((prev) => {
@@ -199,55 +186,7 @@ export default function Razao() {
   const handleOpenCommentModal = (e: React.MouseEvent, row: (typeof DATA_WITH_IDS)[0]) => {
     e.stopPropagation()
     setSelectedEntryForComment(row)
-    setCurrentCommentText(comments[row.id]?.comment || '')
-    setCurrentStatus(comments[row.id]?.status || 'pending')
     setIsCommentModalOpen(true)
-  }
-
-  const handleSaveComment = async () => {
-    if (!projectId || !user || !selectedEntryForComment) {
-      toast.error('Contexto de projeto ou usuário não encontrado.')
-      return
-    }
-
-    const textToSave = currentCommentText.trim() || (currentStatus !== 'pending' ? 'Revisado' : '')
-
-    if (!textToSave) {
-      if (comments[selectedEntryForComment.id]?.id) {
-        setIsSavingComment(true)
-        try {
-          await pb.collection('audit_comments').delete(comments[selectedEntryForComment.id]!.id!)
-          toast.success('Comentário removido.')
-          setIsCommentModalOpen(false)
-        } catch (err) {
-          toast.error('Erro ao remover comentário.')
-        } finally {
-          setIsSavingComment(false)
-        }
-      } else {
-        setIsCommentModalOpen(false)
-      }
-      return
-    }
-
-    setIsSavingComment(true)
-    try {
-      const existing = comments[selectedEntryForComment.id]
-      await saveAuditComment({
-        id: existing?.id,
-        project_id: projectId,
-        entry_reference: selectedEntryForComment.id,
-        comment: textToSave,
-        status: currentStatus,
-        user_id: user.id,
-      })
-      toast.success('Comentário salvo com sucesso!')
-      setIsCommentModalOpen(false)
-    } catch (err) {
-      toast.error('Erro ao salvar comentário.')
-    } finally {
-      setIsSavingComment(false)
-    }
   }
 
   const renderStatusBadge = (status?: string) => {
@@ -261,7 +200,7 @@ export default function Razao() {
       )
     if (status === 'pending')
       return (
-        <Badge variant="outline" className="mt-1">
+        <Badge variant="outline" className="mt-1 border-yellow-500 text-yellow-600 bg-yellow-50/50">
           Pendente
         </Badge>
       )
@@ -524,19 +463,17 @@ export default function Razao() {
           </SelectContent>
         </Select>
 
-        <div
-          className="flex items-center space-x-2 bg-background border px-3 py-2 rounded-md h-10 w-full sm:w-auto"
-          title="Mostrar apenas lançamentos com comentários de auditoria"
-        >
-          <Switch
-            id="show-commented"
-            checked={showOnlyCommented}
-            onCheckedChange={setShowOnlyCommented}
-          />
-          <Label htmlFor="show-commented" className="text-sm cursor-pointer whitespace-nowrap">
-            Comentários
-          </Label>
-        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-[180px] bg-background">
+            <SelectValue placeholder="Status Auditoria" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos</SelectItem>
+            <SelectItem value="pending">Pendente</SelectItem>
+            <SelectItem value="approved">Aprovado</SelectItem>
+            <SelectItem value="rejected">Reprovado</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
 
       <div className="rounded-md border bg-card overflow-x-auto">
@@ -577,7 +514,7 @@ export default function Razao() {
                         'transition-colors py-1 h-10',
                         counterparts.length > 0 && 'cursor-pointer hover:bg-muted/50',
                         isExpanded && 'bg-muted/30 font-medium',
-                        hasComment && 'bg-blue-50/30',
+                        hasComment && 'bg-blue-50/30 dark:bg-blue-900/10',
                       )}
                       onClick={() => counterparts.length > 0 && toggleExpand(row.id)}
                     >
@@ -625,7 +562,7 @@ export default function Razao() {
                         <HighlightedText text={row.historico} highlight={searchQuery} />
                         {hasComment && (
                           <div className="mt-1 flex flex-col items-start gap-1">
-                            <div className="text-xs text-blue-600 flex items-start gap-1">
+                            <div className="text-xs text-blue-600 dark:text-blue-400 flex items-start gap-1">
                               <MessageSquare className="w-3 h-3 mt-0.5 shrink-0" />
                               <span className="line-clamp-1 italic">
                                 {comments[row.id].comment}
@@ -642,12 +579,16 @@ export default function Razao() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          className={cn('h-8 w-8', hasComment && 'bg-blue-100 hover:bg-blue-200')}
+                          className={cn(
+                            'h-8 w-8',
+                            hasComment &&
+                              'bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:hover:bg-blue-900/50',
+                          )}
                           onClick={(e) => handleOpenCommentModal(e, row)}
                           title="Comentário de Auditoria"
                         >
                           {hasComment ? (
-                            <MessageSquare className="h-4 w-4 text-blue-600 fill-blue-100" />
+                            <MessageSquare className="h-4 w-4 text-blue-600 dark:text-blue-400 fill-blue-100 dark:fill-blue-900/30" />
                           ) : (
                             <MessageSquarePlus className="h-4 w-4 text-muted-foreground" />
                           )}
@@ -716,83 +657,14 @@ export default function Razao() {
         </Table>
       </div>
 
-      <Dialog open={isCommentModalOpen} onOpenChange={setIsCommentModalOpen}>
-        <DialogContent className="sm:max-w-[500px]">
-          <DialogHeader>
-            <DialogTitle>Comentário de Auditoria</DialogTitle>
-            <DialogDescription>
-              Adicione ou edite suas observações para este lançamento.
-            </DialogDescription>
-          </DialogHeader>
-
-          {selectedEntryForComment && (
-            <div className="text-sm bg-muted/50 p-3 rounded-md mb-2 space-y-1.5 border">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Data:</span>
-                <span className="font-medium">{selectedEntryForComment.data}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Conta:</span>
-                <span className="font-medium">
-                  {selectedEntryForComment.codigoConta} - {selectedEntryForComment.conta}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Valor:</span>
-                <span
-                  className={cn(
-                    'font-medium',
-                    selectedEntryForComment.dc === 'D' ? 'text-blue-600' : 'text-red-600',
-                  )}
-                >
-                  {formatNum(selectedEntryForComment.valor)} ({selectedEntryForComment.dc})
-                </span>
-              </div>
-            </div>
-          )}
-
-          <div className="space-y-4 py-2">
-            <div className="space-y-2">
-              <Label htmlFor="audit-comment" className="sr-only">
-                Comentário
-              </Label>
-              <Textarea
-                id="audit-comment"
-                placeholder="Digite suas observações aqui..."
-                value={currentCommentText}
-                onChange={(e) => setCurrentCommentText(e.target.value)}
-                className="min-h-[100px] resize-none"
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="audit-status">Status da Revisão</Label>
-              <Select value={currentStatus} onValueChange={(v: any) => setCurrentStatus(v)}>
-                <SelectTrigger id="audit-status">
-                  <SelectValue placeholder="Selecione o status" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="pending">Pendente</SelectItem>
-                  <SelectItem value="approved">Aprovado</SelectItem>
-                  <SelectItem value="rejected">Reprovado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setIsCommentModalOpen(false)}
-              disabled={isSavingComment}
-            >
-              Cancelar
-            </Button>
-            <Button onClick={handleSaveComment} disabled={isSavingComment}>
-              {isSavingComment ? 'Salvando...' : 'Salvar Comentário'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AuditCommentModal
+        isOpen={isCommentModalOpen}
+        onClose={() => setIsCommentModalOpen(false)}
+        entry={selectedEntryForComment}
+        comment={selectedEntryForComment ? comments[selectedEntryForComment.id] || null : null}
+        projectId={projectId!}
+        userId={user?.id!}
+      />
     </div>
   )
 }

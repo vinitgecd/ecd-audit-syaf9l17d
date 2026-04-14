@@ -32,6 +32,7 @@ import {
   Settings,
   LogOut,
   BookOpen,
+  AlertCircle,
 } from 'lucide-react'
 
 export default function Layout() {
@@ -47,6 +48,7 @@ export default function Layout() {
     { title: 'Análise Contábil', url: '/analysis', icon: BarChart2 },
     { title: 'Balancete', url: '/balancete', icon: BookOpen },
     { title: 'Documentos Fiscais', url: '/documents', icon: FileText },
+    { title: 'Relatório de Pendências', url: '/pending', icon: AlertCircle },
   ]
 
   return (

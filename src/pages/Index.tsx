@@ -5,8 +5,19 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
-import { Folder, Plus, FileText, CheckCircle2, Archive, Activity, Clock } from 'lucide-react'
+import {
+  Folder,
+  Plus,
+  FileText,
+  CheckCircle2,
+  Archive,
+  Activity,
+  Clock,
+  MessageSquare,
+  DollarSign,
+} from 'lucide-react'
 import { getProjects, Project } from '@/services/projects'
+import { DATA_WITH_IDS } from '@/lib/mock-data'
 import { useRealtime } from '@/hooks/use-realtime'
 import { format } from 'date-fns'
 
@@ -33,6 +44,7 @@ const StatusBadge = ({ status }: { status: Project['status'] }) => {
 export default function Index() {
   const { user } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
+  const [auditComments, setAuditComments] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   const fetchProjects = useCallback(async () => {
@@ -47,14 +59,36 @@ export default function Index() {
     }
   }, [user])
 
+  const fetchComments = useCallback(async () => {
+    if (!user) return
+    try {
+      const data = await import('@/lib/pocketbase/client')
+        .then((m) => m.default)
+        .collection('audit_comments')
+        .getFullList({ filter: `project_id.user_id = "${user.id}"` })
+      setAuditComments(data)
+    } catch (error) {
+      console.error(error)
+    }
+  }, [user])
+
   useEffect(() => {
     fetchProjects()
-  }, [fetchProjects])
+    fetchComments()
+  }, [fetchProjects, fetchComments])
 
   useRealtime(
     'projects',
     () => {
       fetchProjects()
+    },
+    !!user,
+  )
+
+  useRealtime(
+    'audit_comments',
+    () => {
+      fetchComments()
     },
     !!user,
   )
@@ -71,6 +105,15 @@ export default function Index() {
   const archivedPct = totalProjects === 0 ? 0 : (archivedProjects / totalProjects) * 100
 
   const recentProjects = projects.slice(0, 5)
+
+  const revisedCount = auditComments.length
+  const auditedVolume = auditComments.reduce((acc, c) => {
+    const entry = DATA_WITH_IDS.find((e) => e.id === c.entry_reference)
+    return acc + (entry ? entry.valor : 0)
+  }, 0)
+
+  const formatCurrency = (val: number) =>
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
 
   return (
     <div className="space-y-6">
@@ -112,7 +155,29 @@ export default function Index() {
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Lançamentos Revisados</CardTitle>
+            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{loading ? '-' : revisedCount}</div>
+            <p className="text-xs text-muted-foreground">Total de comentários</p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Volume em Auditoria</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {loading ? '-' : formatCurrency(auditedVolume)}
+            </div>
+            <p className="text-xs text-muted-foreground">Soma dos valores revisados</p>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total de Projetos</CardTitle>
