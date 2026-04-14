@@ -11,7 +11,8 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, Plus, Pencil, Trash2, CheckCircle2, DollarSign } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Search, Plus, Pencil, Trash2, CheckCircle2, AlertCircle } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -52,16 +53,13 @@ import {
   deleteProject,
   Project,
 } from '@/services/projects'
-import { DATA_WITH_IDS } from '@/lib/mock-data'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from '@/hooks/use-auth'
-
-const formatNum = (val: number) =>
-  new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
 
 export default function Projects() {
   const { user } = useAuth()
   const [projects, setProjects] = useState<Project[]>([])
+  const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
@@ -83,6 +81,8 @@ export default function Projects() {
       setProjects(data)
     } catch (err) {
       console.error(err)
+    } finally {
+      setLoading(false)
     }
   }, [])
 
@@ -106,17 +106,22 @@ export default function Projects() {
   useRealtime('projects', () => loadProjects(), !!user)
   useRealtime('audit_comments', () => loadComments(), !!user)
 
-  const revisedCount = auditComments.filter(
-    (c) => c.status === 'approved' || c.status === 'rejected',
+  const totalReviewed = auditComments.filter((c) => c.status === 'approved').length
+  const volumeInAudit = auditComments.filter(
+    (c) => c.status === 'pending' || c.status === 'rejected',
   ).length
-
-  const totalValue = auditComments.reduce((acc, c) => {
-    const entry = DATA_WITH_IDS.find((e) => e.id === c.entry_reference)
-    return acc + (entry ? entry.valor : 0)
-  }, 0)
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!formData.name.trim() || !formData.client.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro de validação',
+        description: 'Nome e Cliente são obrigatórios.',
+      })
+      return
+    }
+
     try {
       await createProject({
         name: formData.name,
@@ -143,6 +148,15 @@ export default function Projects() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingProject) return
+    if (!editingProject.name.trim() || !editingProject.client.trim()) {
+      toast({
+        variant: 'destructive',
+        title: 'Erro de validação',
+        description: 'Nome e Cliente são obrigatórios.',
+      })
+      return
+    }
+
     try {
       await updateProject(editingProject.id, {
         name: editingProject.name,
@@ -199,22 +213,30 @@ export default function Projects() {
       <div className="grid gap-4 md:grid-cols-2">
         <Card className="shadow-elevation border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Lançamentos Revisados</CardTitle>
+            <CardTitle className="text-sm font-medium">Total Revisado</CardTitle>
             <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{revisedCount}</div>
-            <p className="text-xs text-muted-foreground">Com status Aprovado ou Reprovado</p>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{totalReviewed}</div>
+            )}
+            <p className="text-xs text-muted-foreground">Comentários aprovados</p>
           </CardContent>
         </Card>
         <Card className="shadow-elevation border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Valor Total Auditado</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Volume em Auditoria</CardTitle>
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">R$ {formatNum(totalValue)}</div>
-            <p className="text-xs text-muted-foreground">Soma dos lançamentos com comentários</p>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{volumeInAudit}</div>
+            )}
+            <p className="text-xs text-muted-foreground">Comentários pendentes ou reprovados</p>
           </CardContent>
         </Card>
       </div>
@@ -250,7 +272,9 @@ export default function Projects() {
                 </DialogHeader>
                 <form id="create-project" onSubmit={handleCreate} className="space-y-4 py-4">
                   <div className="space-y-2">
-                    <Label htmlFor="name">Nome do Projeto</Label>
+                    <Label htmlFor="name">
+                      Nome do Projeto <span className="text-red-500">*</span>
+                    </Label>
                     <Input
                       id="name"
                       value={formData.name}
@@ -259,7 +283,9 @@ export default function Projects() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="client">Cliente</Label>
+                    <Label htmlFor="client">
+                      Cliente <span className="text-red-500">*</span>
+                    </Label>
                     <Input
                       id="client"
                       value={formData.client}
@@ -285,7 +311,7 @@ export default function Projects() {
                   </div>
                 </form>
                 <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)} type="button">
                     Cancelar
                   </Button>
                   <Button type="submit" form="create-project">
@@ -297,8 +323,29 @@ export default function Projects() {
           </div>
         </CardHeader>
         <CardContent>
-          {filteredProjects.length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">Nenhum projeto encontrado.</div>
+          {loading ? (
+            <div className="space-y-4">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : filteredProjects.length === 0 ? (
+            <div className="text-center py-12 flex flex-col items-center">
+              <img
+                src="https://img.usecurling.com/p/300/200?q=empty%20desk&color=blue"
+                alt="No projects"
+                className="mb-6 rounded-lg opacity-80"
+              />
+              <h3 className="text-lg font-medium text-foreground mb-2">
+                Nenhum projeto encontrado
+              </h3>
+              <p className="text-muted-foreground mb-6 max-w-sm text-center">
+                Você ainda não possui projetos de auditoria. Crie seu primeiro projeto para começar.
+              </p>
+              <Button onClick={() => setIsCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" /> Criar seu primeiro projeto
+              </Button>
+            </div>
           ) : (
             <Table>
               <TableHeader>
@@ -363,7 +410,9 @@ export default function Projects() {
             {editingProject && (
               <form id="edit-project" onSubmit={handleUpdate} className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="edit-name">Nome do Projeto</Label>
+                  <Label htmlFor="edit-name">
+                    Nome do Projeto <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="edit-name"
                     value={editingProject.name}
@@ -372,7 +421,9 @@ export default function Projects() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="edit-client">Cliente</Label>
+                  <Label htmlFor="edit-client">
+                    Cliente <span className="text-red-500">*</span>
+                  </Label>
                   <Input
                     id="edit-client"
                     value={editingProject.client}
@@ -401,7 +452,7 @@ export default function Projects() {
               </form>
             )}
             <DialogFooter>
-              <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+              <Button variant="outline" onClick={() => setIsEditOpen(false)} type="button">
                 Cancelar
               </Button>
               <Button type="submit" form="edit-project">

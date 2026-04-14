@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Skeleton } from '@/components/ui/skeleton'
 import {
   Folder,
   Plus,
@@ -13,11 +14,9 @@ import {
   Archive,
   Activity,
   Clock,
-  MessageSquare,
-  DollarSign,
+  AlertCircle,
 } from 'lucide-react'
 import { getProjects, Project } from '@/services/projects'
-import { DATA_WITH_IDS } from '@/lib/mock-data'
 import { useRealtime } from '@/hooks/use-realtime'
 import { format } from 'date-fns'
 
@@ -77,21 +76,8 @@ export default function Index() {
     fetchComments()
   }, [fetchProjects, fetchComments])
 
-  useRealtime(
-    'projects',
-    () => {
-      fetchProjects()
-    },
-    !!user,
-  )
-
-  useRealtime(
-    'audit_comments',
-    () => {
-      fetchComments()
-    },
-    !!user,
-  )
+  useRealtime('projects', () => fetchProjects(), !!user)
+  useRealtime('audit_comments', () => fetchComments(), !!user)
 
   if (!user) return <Navigate to="/login" replace />
 
@@ -106,14 +92,10 @@ export default function Index() {
 
   const recentProjects = projects.slice(0, 5)
 
-  const revisedCount = auditComments.length
-  const auditedVolume = auditComments.reduce((acc, c) => {
-    const entry = DATA_WITH_IDS.find((e) => e.id === c.entry_reference)
-    return acc + (entry ? entry.valor : 0)
-  }, 0)
-
-  const formatCurrency = (val: number) =>
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val)
+  const totalReviewed = auditComments.filter((c) => c.status === 'approved').length
+  const volumeInAudit = auditComments.filter(
+    (c) => c.status === 'pending' || c.status === 'rejected',
+  ).length
 
   return (
     <div className="space-y-6">
@@ -158,24 +140,30 @@ export default function Index() {
       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Lançamentos Revisados</CardTitle>
-            <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Total Revisado</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loading ? '-' : revisedCount}</div>
-            <p className="text-xs text-muted-foreground">Total de comentários</p>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{totalReviewed}</div>
+            )}
+            <p className="text-xs text-muted-foreground">Comentários aprovados</p>
           </CardContent>
         </Card>
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Volume em Auditoria</CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <AlertCircle className="h-4 w-4 text-orange-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">
-              {loading ? '-' : formatCurrency(auditedVolume)}
-            </div>
-            <p className="text-xs text-muted-foreground">Soma dos valores revisados</p>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{volumeInAudit}</div>
+            )}
+            <p className="text-xs text-muted-foreground">Pendentes ou reprovados</p>
           </CardContent>
         </Card>
         <Card>
@@ -184,7 +172,11 @@ export default function Index() {
             <FileText className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loading ? '-' : totalProjects}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{totalProjects}</div>
+            )}
             <p className="text-xs text-muted-foreground">Todos os registros</p>
           </CardContent>
         </Card>
@@ -194,7 +186,11 @@ export default function Index() {
             <Activity className="h-4 w-4 text-blue-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loading ? '-' : activeProjects}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{activeProjects}</div>
+            )}
             <p className="text-xs text-muted-foreground">Em andamento</p>
           </CardContent>
         </Card>
@@ -204,7 +200,11 @@ export default function Index() {
             <CheckCircle2 className="h-4 w-4 text-green-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loading ? '-' : completedProjects}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{completedProjects}</div>
+            )}
             <p className="text-xs text-muted-foreground">Finalizados com sucesso</p>
           </CardContent>
         </Card>
@@ -214,7 +214,11 @@ export default function Index() {
             <Archive className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{loading ? '-' : archivedProjects}</div>
+            {loading ? (
+              <Skeleton className="h-8 w-16" />
+            ) : (
+              <div className="text-2xl font-bold">{archivedProjects}</div>
+            )}
             <p className="text-xs text-muted-foreground">Armazenados</p>
           </CardContent>
         </Card>
@@ -228,35 +232,35 @@ export default function Index() {
           </CardHeader>
           <CardContent className="flex-1">
             <div className="space-y-4">
-              {recentProjects.map((project) => (
-                <div
-                  key={project.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg gap-4 bg-card hover:bg-accent/50 transition-colors"
-                >
-                  <div className="space-y-1">
-                    <p className="font-medium leading-none">{project.name}</p>
-                    <p className="text-sm text-muted-foreground">{project.client}</p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="text-sm text-muted-foreground flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {format(new Date(project.updated), 'dd/MM/yyyy')}
-                    </div>
-                    <StatusBadge status={project.status} />
-                  </div>
+              {loading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full rounded-lg" />
+                  ))}
                 </div>
-              ))}
-              {!loading && recentProjects.length === 0 && (
+              ) : recentProjects.length === 0 ? (
                 <div className="text-center text-muted-foreground py-8 border rounded-lg border-dashed">
                   Nenhum projeto encontrado.
                 </div>
-              )}
-              {loading && (
-                <div className="space-y-4">
-                  {[1, 2, 3].map((i) => (
-                    <div key={i} className="h-16 bg-muted/50 rounded-lg animate-pulse" />
-                  ))}
-                </div>
+              ) : (
+                recentProjects.map((project) => (
+                  <div
+                    key={project.id}
+                    className="flex flex-col sm:flex-row sm:items-center justify-between p-4 border rounded-lg gap-4 bg-card hover:bg-accent/50 transition-colors"
+                  >
+                    <div className="space-y-1">
+                      <p className="font-medium leading-none">{project.name}</p>
+                      <p className="text-sm text-muted-foreground">{project.client}</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-sm text-muted-foreground flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {project.updated ? format(new Date(project.updated), 'dd/MM/yyyy') : '-'}
+                      </div>
+                      <StatusBadge status={project.status} />
+                    </div>
+                  </div>
+                ))
               )}
             </div>
           </CardContent>
