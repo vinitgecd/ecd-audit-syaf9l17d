@@ -314,7 +314,9 @@ export default function Balancete() {
                     'cursor-pointer transition-colors py-1 h-10 hover:bg-muted/80',
                     getRowStyle(row.nivel, row.tipo),
                   )}
-                  onClick={() => navigate(`/balancete/${row.codigo}/razao`)}
+                  onClick={() =>
+                    navigate(`/projects/${selectedProjectId}/accounts/${row.id}/ledger`)
+                  }
                 >
                   <TableCell className="py-2">{row.nivel}</TableCell>
                   <TableCell className="py-2 font-mono text-xs">{row.codigo}</TableCell>

@@ -30,11 +30,15 @@ export interface EntryItem {
   updated: string
   expand?: {
     entry_id?: JournalEntry
+    account_id?: Account
   }
 }
 
 export const getAccountingProjects = () =>
   pb.collection('projects').getFullList({ sort: '-created' })
+
+export const getAccount = (accountId: string) =>
+  pb.collection('accounts').getOne<Account>(accountId)
 
 export const getAccounts = (projectId: string) =>
   pb.collection('accounts').getFullList<Account>({
@@ -47,3 +51,26 @@ export const getEntryItems = (projectId: string) =>
     filter: `entry_id.project_id = "${projectId}"`,
     expand: 'entry_id',
   })
+
+export const getAccountEntries = (accountId: string) =>
+  pb.collection('entry_items').getFullList<EntryItem>({
+    filter: `account_id = "${accountId}"`,
+    expand: 'entry_id',
+    sort: 'entry_id.date,created',
+  })
+
+export const getEntryItemsByEntryIds = async (entryIds: string[]) => {
+  if (entryIds.length === 0) return []
+  const chunkSize = 50
+  const results: EntryItem[] = []
+  for (let i = 0; i < entryIds.length; i += chunkSize) {
+    const chunk = entryIds.slice(i, i + chunkSize)
+    const filter = chunk.map((id) => `entry_id="${id}"`).join('||')
+    const items = await pb.collection('entry_items').getFullList<EntryItem>({
+      filter: `(${filter})`,
+      expand: 'account_id',
+    })
+    results.push(...items)
+  }
+  return results
+}
