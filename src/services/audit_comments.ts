@@ -5,6 +5,7 @@ export interface AuditComment {
   project_id: string
   entry_reference: string
   comment: string
+  status?: 'pending' | 'approved' | 'rejected'
   user_id: string
   created?: string
   updated?: string

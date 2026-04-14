@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Table,
@@ -11,7 +11,7 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Search, Plus, Pencil, Trash2 } from 'lucide-react'
+import { Search, Plus, Pencil, Trash2, CheckCircle2, DollarSign } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -42,6 +42,10 @@ import {
 import { useToast } from '@/hooks/use-toast'
 import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
+
+import pb from '@/lib/pocketbase/client'
+import { AuditComment } from '@/services/audit_comments'
+import { DATA_WITH_IDS } from '@/lib/mock-data'
 
 export interface MockProject {
   id: string
@@ -79,6 +83,9 @@ const initialProjects: MockProject[] = [
   },
 ]
 
+const formatNum = (val: number) =>
+  new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
+
 export default function Projects() {
   const [projects, setProjects] = useState<MockProject[]>(initialProjects)
   const [search, setSearch] = useState('')
@@ -86,6 +93,7 @@ export default function Projects() {
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
   const [editingProject, setEditingProject] = useState<MockProject | null>(null)
+  const [auditComments, setAuditComments] = useState<AuditComment[]>([])
 
   const { toast } = useToast()
 
@@ -94,6 +102,22 @@ export default function Projects() {
     client: '',
     status: 'active' as const,
   })
+
+  useEffect(() => {
+    pb.collection('audit_comments')
+      .getFullList<AuditComment>()
+      .then(setAuditComments)
+      .catch((err) => console.error('Failed to load audit comments for dashboard:', err))
+  }, [])
+
+  const revisedCount = auditComments.filter(
+    (c) => c.status === 'approved' || c.status === 'rejected',
+  ).length
+
+  const totalValue = auditComments.reduce((acc, c) => {
+    const entry = DATA_WITH_IDS.find((e) => e.id === c.entry_reference)
+    return acc + (entry ? entry.valor : 0)
+  }, 0)
 
   const handleCreate = (e: React.FormEvent) => {
     e.preventDefault()
@@ -156,59 +180,196 @@ export default function Projects() {
   }
 
   return (
-    <Card className="border-none shadow-elevation">
-      <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6">
-        <div>
-          <CardTitle className="text-2xl">Projetos</CardTitle>
-          <CardDescription>Gerencie seus projetos de auditoria.</CardDescription>
-        </div>
-        <div className="flex w-full sm:w-auto items-center gap-2">
-          <div className="relative flex-1 sm:w-64">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Buscar projetos..."
-              className="pl-8"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+    <div className="space-y-6">
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card className="shadow-elevation border-none">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Lançamentos Revisados</CardTitle>
+            <CheckCircle2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{revisedCount}</div>
+            <p className="text-xs text-muted-foreground">Com status Aprovado ou Reprovado</p>
+          </CardContent>
+        </Card>
+        <Card className="shadow-elevation border-none">
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Valor Total Auditado</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">R$ {formatNum(totalValue)}</div>
+            <p className="text-xs text-muted-foreground">Soma dos lançamentos com comentários</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="border-none shadow-elevation">
+        <CardHeader className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 pb-6">
+          <div>
+            <CardTitle className="text-2xl">Projetos</CardTitle>
+            <CardDescription>Gerencie seus projetos de auditoria.</CardDescription>
           </div>
-          <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-            <DialogTrigger asChild>
-              <Button className="shrink-0 gap-2">
-                <Plus className="h-4 w-4" /> Novo Projeto
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Criar Novo Projeto</DialogTitle>
-                <DialogDescription>
-                  Preencha os detalhes do novo projeto de auditoria.
-                </DialogDescription>
-              </DialogHeader>
-              <form id="create-project" onSubmit={handleCreate} className="space-y-4 py-4">
+          <div className="flex w-full sm:w-auto items-center gap-2">
+            <div className="relative flex-1 sm:w-64">
+              <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar projetos..."
+                className="pl-8"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+            </div>
+            <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+              <DialogTrigger asChild>
+                <Button className="shrink-0 gap-2">
+                  <Plus className="h-4 w-4" /> Novo Projeto
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Criar Novo Projeto</DialogTitle>
+                  <DialogDescription>
+                    Preencha os detalhes do novo projeto de auditoria.
+                  </DialogDescription>
+                </DialogHeader>
+                <form id="create-project" onSubmit={handleCreate} className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Nome do Projeto</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="client">Cliente</Label>
+                    <Input
+                      id="client"
+                      value={formData.client}
+                      onChange={(e) => setFormData({ ...formData, client: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="status">Status</Label>
+                    <Select
+                      value={formData.status}
+                      onValueChange={(v: any) => setFormData({ ...formData, status: v })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Ativo</SelectItem>
+                        <SelectItem value="completed">Concluído</SelectItem>
+                        <SelectItem value="archived">Arquivado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </form>
+                <DialogFooter>
+                  <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
+                    Cancelar
+                  </Button>
+                  <Button type="submit" form="create-project">
+                    Criar Projeto
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          </div>
+        </CardHeader>
+        <CardContent>
+          {filteredProjects.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground">Nenhum projeto encontrado.</div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Criado em</TableHead>
+                  <TableHead className="text-right">Ações</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredProjects.map((project) => (
+                  <TableRow key={project.id}>
+                    <TableCell className="font-medium">{project.name}</TableCell>
+                    <TableCell>{project.client}</TableCell>
+                    <TableCell>
+                      <Badge variant="secondary" className={statusColors[project.status]}>
+                        {statusLabels[project.status]}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {format(new Date(project.created), "dd 'de' MMM, yyyy", { locale: ptBR })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => handleEdit(project)}
+                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          <span className="sr-only">Editar</span>
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setProjectToDelete(project.id)}
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          <span className="sr-only">Excluir</span>
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+
+        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Editar Projeto</DialogTitle>
+              <DialogDescription>Atualize os detalhes do projeto de auditoria.</DialogDescription>
+            </DialogHeader>
+            {editingProject && (
+              <form id="edit-project" onSubmit={handleUpdate} className="space-y-4 py-4">
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nome do Projeto</Label>
+                  <Label htmlFor="edit-name">Nome do Projeto</Label>
                   <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    id="edit-name"
+                    value={editingProject.name}
+                    onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="client">Cliente</Label>
+                  <Label htmlFor="edit-client">Cliente</Label>
                   <Input
-                    id="client"
-                    value={formData.client}
-                    onChange={(e) => setFormData({ ...formData, client: e.target.value })}
+                    id="edit-client"
+                    value={editingProject.client}
+                    onChange={(e) =>
+                      setEditingProject({ ...editingProject, client: e.target.value })
+                    }
                     required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="status">Status</Label>
+                  <Label htmlFor="edit-status">Status</Label>
                   <Select
-                    value={formData.status}
-                    onValueChange={(v: any) => setFormData({ ...formData, status: v })}
+                    value={editingProject.status}
+                    onValueChange={(v: any) => setEditingProject({ ...editingProject, status: v })}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -221,151 +382,41 @@ export default function Projects() {
                   </Select>
                 </div>
               </form>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsCreateOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button type="submit" form="create-project">
-                  Criar Projeto
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
-      </CardHeader>
-      <CardContent>
-        {filteredProjects.length === 0 ? (
-          <div className="text-center py-8 text-muted-foreground">Nenhum projeto encontrado.</div>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Criado em</TableHead>
-                <TableHead className="text-right">Ações</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredProjects.map((project) => (
-                <TableRow key={project.id}>
-                  <TableCell className="font-medium">{project.name}</TableCell>
-                  <TableCell>{project.client}</TableCell>
-                  <TableCell>
-                    <Badge variant="secondary" className={statusColors[project.status]}>
-                      {statusLabels[project.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">
-                    {format(new Date(project.created), "dd 'de' MMM, yyyy", { locale: ptBR })}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleEdit(project)}
-                        className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                      >
-                        <Pencil className="h-4 w-4" />
-                        <span className="sr-only">Editar</span>
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => setProjectToDelete(project.id)}
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                        <span className="sr-only">Excluir</span>
-                      </Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setIsEditOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" form="edit-project">
+                Salvar Alterações
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Editar Projeto</DialogTitle>
-            <DialogDescription>Atualize os detalhes do projeto de auditoria.</DialogDescription>
-          </DialogHeader>
-          {editingProject && (
-            <form id="edit-project" onSubmit={handleUpdate} className="space-y-4 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Nome do Projeto</Label>
-                <Input
-                  id="edit-name"
-                  value={editingProject.name}
-                  onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-client">Cliente</Label>
-                <Input
-                  id="edit-client"
-                  value={editingProject.client}
-                  onChange={(e) => setEditingProject({ ...editingProject, client: e.target.value })}
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Status</Label>
-                <Select
-                  value={editingProject.status}
-                  onValueChange={(v: any) => setEditingProject({ ...editingProject, status: v })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="active">Ativo</SelectItem>
-                    <SelectItem value="completed">Concluído</SelectItem>
-                    <SelectItem value="archived">Arquivado</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </form>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsEditOpen(false)}>
-              Cancelar
-            </Button>
-            <Button type="submit" form="edit-project">
-              Salvar Alterações
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <AlertDialog
-        open={!!projectToDelete}
-        onOpenChange={(open) => !open && setProjectToDelete(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Excluir Projeto</AlertDialogTitle>
-            <AlertDialogDescription>
-              Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleDelete}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              Excluir
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </Card>
+        <AlertDialog
+          open={!!projectToDelete}
+          onOpenChange={(open) => !open && setProjectToDelete(null)}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Excluir Projeto</AlertDialogTitle>
+              <AlertDialogDescription>
+                Tem certeza que deseja excluir este projeto? Esta ação não pode ser desfeita.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={handleDelete}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Excluir
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </Card>
+    </div>
   )
 }

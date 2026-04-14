@@ -47,6 +47,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Textarea } from '@/components/ui/textarea'
+import { Badge } from '@/components/ui/badge'
 
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
@@ -57,6 +58,7 @@ import {
   saveAuditComment,
   AuditComment,
 } from '@/services/audit_comments'
+import { DATA_WITH_IDS } from '@/lib/mock-data'
 
 type DateRange = {
   from: Date | undefined
@@ -67,137 +69,6 @@ const formatNum = (val: number) =>
   new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
 
 const parseDateStr = (dateStr: string) => parse(dateStr, 'dd/MM/yyyy', new Date())
-
-const MOCK_RAZAO_DATA = [
-  {
-    data: '07/01/2015',
-    codigoConta: '101907',
-    conta: 'CAIXA GERAL',
-    dc: 'D',
-    valor: 20.0,
-    saldo: 11276.49,
-    dcSaldo: 'D',
-    historico:
-      'Valor ref.receb juros(oobs)dupl: 11359 -Panificadora Monte Castelo conf. financeiro filial: CP',
-    numero: '1306',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '1332',
-    conta: 'JUROS OBTIDOS',
-    dc: 'C',
-    valor: 20.0,
-    saldo: 11276.49,
-    dcSaldo: 'D',
-    historico:
-      'Valor ref.receb juros(oobs)dupl: 11359 -Panificadora Monte Castelo conf. financeiro filial: CP',
-    numero: '1306',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '710',
-    conta: 'LANCHES E REFEIÇÕES',
-    dc: 'D',
-    valor: 60.0,
-    saldo: 11216.49,
-    dcSaldo: 'D',
-    historico: 'Pg. ref. Lanches e refeicoes - motoristas rota barauna-conf. financeiro filial: CP',
-    numero: '1308',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '101907',
-    conta: 'CAIXA GERAL',
-    dc: 'C',
-    valor: 60.0,
-    saldo: 11216.49,
-    dcSaldo: 'D',
-    historico: 'Pg. ref. Lanches e refeicoes - motoristas rota barauna-conf. financeiro filial: CP',
-    numero: '1308',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '1350',
-    conta: 'TRANSPORTE DE MERCADORIAS',
-    dc: 'D',
-    valor: 20.0,
-    saldo: 11196.49,
-    dcSaldo: 'D',
-    historico: 'Pg. ref. Gorjeta/enlonamento moinho 30/06/15-conf. financeiro filial: CP',
-    numero: '1310',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '101907',
-    conta: 'CAIXA GERAL',
-    dc: 'C',
-    valor: 20.0,
-    saldo: 11196.49,
-    dcSaldo: 'D',
-    historico: 'Pg. ref. Gorjeta/enlonamento moinho 30/06/15-conf. financeiro filial: CP',
-    numero: '1310',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '1242',
-    conta: 'OMEGA DISTRIBUIDORA DE BATERIAS LTDA',
-    dc: 'D',
-    valor: 1100.0,
-    saldo: 10096.49,
-    dcSaldo: 'D',
-    historico: 'Pg. ref. 1620 - mys 5566 02 baterias omega nf 16449-conf. financeiro filial: Natal',
-    numero: '1314',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '101907',
-    conta: 'CAIXA GERAL',
-    dc: 'C',
-    valor: 1100.0,
-    saldo: 10096.49,
-    dcSaldo: 'D',
-    historico: 'Pg. ref. 1620 - mys 5566 02 baterias omega nf 16449-conf. financeiro filial: Natal',
-    numero: '1314',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '710',
-    conta: 'LANCHES E REFEIÇÕES',
-    dc: 'D',
-    valor: 39.0,
-    saldo: 10057.49,
-    dcSaldo: 'D',
-    historico:
-      'Pg. ref. Lanches e refeicoes - motoristas moinho 30/06/15-conf. financeiro filial: CP',
-    numero: '1319',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '101907',
-    conta: 'CAIXA GERAL',
-    dc: 'C',
-    valor: 39.0,
-    saldo: 10057.49,
-    dcSaldo: 'D',
-    historico:
-      'Pg. ref. Lanches e refeicoes - motoristas moinho 30/06/15-conf. financeiro filial: CP',
-    numero: '1319',
-  },
-  {
-    data: '07/01/2015',
-    codigoConta: '101907',
-    conta: 'CAIXA GERAL',
-    dc: 'D',
-    valor: 1.77,
-    saldo: 10059.26,
-    dcSaldo: 'D',
-    historico:
-      'Valor ref juros na baixa duplic. 55738-18-Eugenio Tavares De Barros conf. financeiro filial: NATAL',
-    numero: '1324',
-  },
-]
-
-const DATA_WITH_IDS = MOCK_RAZAO_DATA.map((row, idx) => ({ ...row, id: String(idx) }))
 
 const HighlightedText = ({ text, highlight }: { text: string; highlight: string }) => {
   if (!highlight.trim()) return <span>{text}</span>
@@ -236,6 +107,7 @@ export default function Razao() {
     (typeof DATA_WITH_IDS)[0] | null
   >(null)
   const [currentCommentText, setCurrentCommentText] = useState('')
+  const [currentStatus, setCurrentStatus] = useState<'pending' | 'approved' | 'rejected'>('pending')
   const [isSavingComment, setIsSavingComment] = useState(false)
 
   const accountInfo = {
@@ -245,7 +117,6 @@ export default function Razao() {
     saldoFinal: '10.059,26 D',
   }
 
-  // Fetch project context
   useEffect(() => {
     if (user?.id) {
       pb.collection('projects')
@@ -255,7 +126,6 @@ export default function Razao() {
     }
   }, [user])
 
-  // Fetch comments
   useEffect(() => {
     if (projectId) {
       getAuditCommentsByProject(projectId).then((list) => {
@@ -268,7 +138,6 @@ export default function Razao() {
     }
   }, [projectId])
 
-  // Real-time comments update
   useRealtime(
     'audit_comments',
     (e) => {
@@ -331,6 +200,7 @@ export default function Razao() {
     e.stopPropagation()
     setSelectedEntryForComment(row)
     setCurrentCommentText(comments[row.id]?.comment || '')
+    setCurrentStatus(comments[row.id]?.status || 'pending')
     setIsCommentModalOpen(true)
   }
 
@@ -340,8 +210,9 @@ export default function Razao() {
       return
     }
 
-    if (!currentCommentText.trim()) {
-      // If empty, delete existing comment if there is one
+    const textToSave = currentCommentText.trim() || (currentStatus !== 'pending' ? 'Revisado' : '')
+
+    if (!textToSave) {
       if (comments[selectedEntryForComment.id]?.id) {
         setIsSavingComment(true)
         try {
@@ -366,7 +237,8 @@ export default function Razao() {
         id: existing?.id,
         project_id: projectId,
         entry_reference: selectedEntryForComment.id,
-        comment: currentCommentText,
+        comment: textToSave,
+        status: currentStatus,
         user_id: user.id,
       })
       toast.success('Comentário salvo com sucesso!')
@@ -378,9 +250,163 @@ export default function Razao() {
     }
   }
 
+  const renderStatusBadge = (status?: string) => {
+    if (status === 'approved')
+      return <Badge className="bg-green-500 hover:bg-green-600 mt-1">Aprovado</Badge>
+    if (status === 'rejected')
+      return (
+        <Badge variant="destructive" className="mt-1">
+          Reprovado
+        </Badge>
+      )
+    if (status === 'pending')
+      return (
+        <Badge variant="outline" className="mt-1">
+          Pendente
+        </Badge>
+      )
+    return null
+  }
+
+  const exportToExcel = () => {
+    const headers = [
+      'Data',
+      'Cód. Conta',
+      'Conta',
+      'D/C',
+      'Valor',
+      'Histórico',
+      'Comentário Auditoria',
+      'Status Auditoria',
+    ]
+    const rows = filteredEntries.map((row) => {
+      const comment = comments[row.id]
+      const statusStr =
+        comment?.status === 'approved'
+          ? 'Aprovado'
+          : comment?.status === 'rejected'
+            ? 'Reprovado'
+            : comment?.status === 'pending'
+              ? 'Pendente'
+              : ''
+      return [
+        row.data,
+        row.codigoConta,
+        `"${row.conta}"`,
+        row.dc,
+        row.valor,
+        `"${row.historico.replace(/"/g, '""')}"`,
+        `"${comment?.comment ? comment.comment.replace(/"/g, '""') : ''}"`,
+        statusStr,
+      ].join(',')
+    })
+
+    const dateStr = date?.from
+      ? `Período:,${format(date.from, 'dd/MM/yyyy')} a ${
+          date.to ? format(date.to, 'dd/MM/yyyy') : format(date.from, 'dd/MM/yyyy')
+        }`
+      : 'Período:,Início a Fim'
+
+    const csvContent = [
+      `Conta:,${accountInfo.codigo} - ${accountInfo.descricao}`,
+      dateStr,
+      '',
+      headers.join(','),
+      ...rows,
+    ].join('\n')
+
+    const blob = new Blob([new Uint8Array([0xef, 0xbb, 0xbf]), csvContent], {
+      type: 'text/csv;charset=utf-8;',
+    })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `razao_${accountInfo.codigo}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  const exportToPDF = () => {
+    const printWindow = window.open('', '_blank')
+    if (!printWindow) return
+
+    const dateStr = date?.from
+      ? `${format(date.from, 'dd/MM/yyyy')} a ${
+          date.to ? format(date.to, 'dd/MM/yyyy') : format(date.from, 'dd/MM/yyyy')
+        }`
+      : 'Início a Fim'
+
+    const html = `
+      <html>
+        <head>
+          <title>Razão Auxiliar - ${accountInfo.codigo}</title>
+          <style>
+            body { font-family: sans-serif; padding: 20px; color: #333; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 12px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f4f4f5; }
+            .text-right { text-align: right; }
+            .text-center { text-align: center; }
+            .header-info { margin-bottom: 20px; line-height: 1.5; }
+            h2 { margin-bottom: 10px; }
+          </style>
+        </head>
+        <body>
+          <h2>Relatório de Razão Auxiliar</h2>
+          <div class="header-info">
+            <div><strong>Conta:</strong> ${accountInfo.codigo} - ${accountInfo.descricao}</div>
+            <div><strong>Período:</strong> ${dateStr}</div>
+          </div>
+          <table>
+            <thead>
+              <tr>
+                <th>Data</th>
+                <th>Histórico</th>
+                <th class="text-center">D/C</th>
+                <th class="text-right">Valor</th>
+                <th>Comentário Auditoria</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${filteredEntries
+                .map((row) => {
+                  const comment = comments[row.id]
+                  const statusStr =
+                    comment?.status === 'approved'
+                      ? 'Aprovado'
+                      : comment?.status === 'rejected'
+                        ? 'Reprovado'
+                        : comment?.status === 'pending'
+                          ? 'Pendente'
+                          : ''
+                  return `
+                  <tr>
+                    <td>${row.data}</td>
+                    <td>${row.historico}</td>
+                    <td class="text-center">${row.dc}</td>
+                    <td class="text-right">${formatNum(row.valor)}</td>
+                    <td>${comment?.comment || ''}</td>
+                    <td>${statusStr}</td>
+                  </tr>
+                `
+                })
+                .join('')}
+            </tbody>
+          </table>
+          <script>
+            window.onload = () => { window.print(); window.close(); }
+          </script>
+        </body>
+      </html>
+    `
+    printWindow.document.write(html)
+    printWindow.document.close()
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      {/* Top Action Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
           <Button variant="outline" size="sm" onClick={() => navigate('/balancete')}>
@@ -391,22 +417,21 @@ export default function Razao() {
         </div>
 
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" className="h-8">
+          <Button variant="outline" size="sm" className="h-8" onClick={exportToPDF}>
             <FileText className="h-4 w-4 mr-2" />
             PDF
           </Button>
-          <Button variant="outline" size="sm" className="h-8">
+          <Button variant="outline" size="sm" className="h-8" onClick={exportToExcel}>
             <FileDown className="h-4 w-4 mr-2" />
             Excel
           </Button>
-          <Button variant="outline" size="sm" className="h-8">
+          <Button variant="outline" size="sm" className="h-8" onClick={() => window.print()}>
             <Printer className="h-4 w-4 mr-2" />
             Imprimir
           </Button>
         </div>
       </div>
 
-      {/* Account Summary Panel */}
       <Card className="shadow-sm">
         <CardContent className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 bg-muted/30">
           <div className="flex flex-col">
@@ -441,7 +466,6 @@ export default function Razao() {
         </CardContent>
       </Card>
 
-      {/* Filters */}
       <div className="flex flex-col sm:flex-row flex-wrap items-center gap-4 bg-card p-4 rounded-md border shadow-sm">
         <Popover>
           <PopoverTrigger asChild>
@@ -515,7 +539,6 @@ export default function Razao() {
         </div>
       </div>
 
-      {/* Transactions Table */}
       <div className="rounded-md border bg-card overflow-x-auto">
         <Table className="relative min-w-[1200px]">
           <TableHeader className="bg-background z-10 shadow-sm">
@@ -601,9 +624,14 @@ export default function Razao() {
                       >
                         <HighlightedText text={row.historico} highlight={searchQuery} />
                         {hasComment && (
-                          <div className="mt-1 text-xs text-blue-600 flex items-start gap-1">
-                            <MessageSquare className="w-3 h-3 mt-0.5 shrink-0" />
-                            <span className="line-clamp-1 italic">{comments[row.id].comment}</span>
+                          <div className="mt-1 flex flex-col items-start gap-1">
+                            <div className="text-xs text-blue-600 flex items-start gap-1">
+                              <MessageSquare className="w-3 h-3 mt-0.5 shrink-0" />
+                              <span className="line-clamp-1 italic">
+                                {comments[row.id].comment}
+                              </span>
+                            </div>
+                            {renderStatusBadge(comments[row.id].status)}
                           </div>
                         )}
                       </TableCell>
@@ -688,7 +716,6 @@ export default function Razao() {
         </Table>
       </div>
 
-      {/* Audit Comment Modal */}
       <Dialog open={isCommentModalOpen} onOpenChange={setIsCommentModalOpen}>
         <DialogContent className="sm:max-w-[500px]">
           <DialogHeader>
@@ -724,17 +751,32 @@ export default function Razao() {
             </div>
           )}
 
-          <div className="space-y-2 py-2">
-            <Label htmlFor="audit-comment" className="sr-only">
-              Comentário
-            </Label>
-            <Textarea
-              id="audit-comment"
-              placeholder="Digite suas observações aqui..."
-              value={currentCommentText}
-              onChange={(e) => setCurrentCommentText(e.target.value)}
-              className="min-h-[140px] resize-none"
-            />
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="audit-comment" className="sr-only">
+                Comentário
+              </Label>
+              <Textarea
+                id="audit-comment"
+                placeholder="Digite suas observações aqui..."
+                value={currentCommentText}
+                onChange={(e) => setCurrentCommentText(e.target.value)}
+                className="min-h-[100px] resize-none"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="audit-status">Status da Revisão</Label>
+              <Select value={currentStatus} onValueChange={(v: any) => setCurrentStatus(v)}>
+                <SelectTrigger id="audit-status">
+                  <SelectValue placeholder="Selecione o status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pending">Pendente</SelectItem>
+                  <SelectItem value="approved">Aprovado</SelectItem>
+                  <SelectItem value="rejected">Reprovado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           <DialogFooter>
