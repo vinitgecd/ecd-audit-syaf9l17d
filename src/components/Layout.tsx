@@ -31,6 +31,7 @@ import {
   FileText,
   Settings,
   LogOut,
+  BookOpen,
 } from 'lucide-react'
 
 export default function Layout() {
@@ -44,6 +45,7 @@ export default function Layout() {
     { title: 'Projetos', url: '/projects', icon: Folder },
     { title: 'Importar', url: '/import', icon: Upload },
     { title: 'Análise Contábil', url: '/analysis', icon: BarChart2 },
+    { title: 'Balancete', url: '/balancete', icon: BookOpen },
     { title: 'Documentos Fiscais', url: '/documents', icon: FileText },
   ]
 

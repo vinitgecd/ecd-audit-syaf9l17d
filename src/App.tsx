@@ -10,6 +10,7 @@ import Index from './pages/Index'
 import Projects from './pages/Projects'
 import Import from './pages/Import'
 import Analysis from './pages/Analysis'
+import Balancete from './pages/Balancete'
 import Documents from './pages/Documents'
 import NotFound from './pages/NotFound'
 
@@ -26,6 +27,7 @@ const App = () => (
             <Route path="/projects" element={<Projects />} />
             <Route path="/import" element={<Import />} />
             <Route path="/analysis" element={<Analysis />} />
+            <Route path="/balancete" element={<Balancete />} />
             <Route path="/documents" element={<Documents />} />
           </Route>
           <Route path="*" element={<NotFound />} />
