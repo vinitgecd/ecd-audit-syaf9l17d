@@ -48,7 +48,7 @@ const parseDateStr = (dateStr: string) => parse(dateStr, 'dd/MM/yyyy', new Date(
 const MOCK_RAZAO_DATA = [
   {
     data: '07/01/2015',
-    codigoConta: '5',
+    codigoConta: '101907',
     conta: 'CAIXA GERAL',
     dc: 'D',
     valor: 20.0,
@@ -83,7 +83,7 @@ const MOCK_RAZAO_DATA = [
   },
   {
     data: '07/01/2015',
-    codigoConta: '5',
+    codigoConta: '101907',
     conta: 'CAIXA GERAL',
     dc: 'C',
     valor: 60.0,
@@ -105,7 +105,7 @@ const MOCK_RAZAO_DATA = [
   },
   {
     data: '07/01/2015',
-    codigoConta: '5',
+    codigoConta: '101907',
     conta: 'CAIXA GERAL',
     dc: 'C',
     valor: 20.0,
@@ -127,7 +127,7 @@ const MOCK_RAZAO_DATA = [
   },
   {
     data: '07/01/2015',
-    codigoConta: '5',
+    codigoConta: '101907',
     conta: 'CAIXA GERAL',
     dc: 'C',
     valor: 1100.0,
@@ -150,7 +150,7 @@ const MOCK_RAZAO_DATA = [
   },
   {
     data: '07/01/2015',
-    codigoConta: '5',
+    codigoConta: '101907',
     conta: 'CAIXA GERAL',
     dc: 'C',
     valor: 39.0,
@@ -162,7 +162,7 @@ const MOCK_RAZAO_DATA = [
   },
   {
     data: '07/01/2015',
-    codigoConta: '5',
+    codigoConta: '101907',
     conta: 'CAIXA GERAL',
     dc: 'D',
     valor: 1.77,
@@ -205,7 +205,7 @@ export default function Razao() {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
 
   const accountInfo = {
-    codigo: accountId || '5',
+    codigo: accountId || '101907',
     descricao: 'CAIXA GERAL',
     saldoInicial: '11.256,49 D',
     saldoFinal: '10.059,26 D',
@@ -245,7 +245,7 @@ export default function Razao() {
   }
 
   return (
-    <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
+    <div className="flex flex-col gap-4">
       {/* Top Action Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div className="flex items-center gap-4">
@@ -281,7 +281,7 @@ export default function Razao() {
               className="text-sm font-semibold truncate"
               title="DISPAN DISTRIBUIDORA E COMERCIO DE PRODUTOS PARA PANIFICAÇÃO LTDA ME"
             >
-              DISPAN DISTRIBUIDORA E COMERCIO...
+              DISPAN DISTRIBUIDORA E COMERCIO DE PRODUTOS PARA PANIFICAÇÃO LTDA ME
             </span>
             <span className="text-xs text-muted-foreground mt-0.5">CNPJ: 08.381.848/0001-10</span>
           </div>
@@ -368,9 +368,9 @@ export default function Razao() {
       </div>
 
       {/* Transactions Table */}
-      <div className="rounded-md border bg-card flex-1 overflow-auto">
+      <div className="rounded-md border bg-card overflow-x-auto">
         <Table className="relative min-w-[1200px]">
-          <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+          <TableHeader className="bg-background z-10 shadow-sm">
             <TableRow className="hover:bg-transparent">
               <TableHead className="w-[40px] px-2"></TableHead>
               <TableHead className="w-[100px]">Data</TableHead>
