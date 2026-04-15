@@ -154,8 +154,9 @@ export default function Balancete() {
           }
 
       let finalBalance = totalDebitos - totalCreditos
-      const isCreditNormal =
-        acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
+      const isCreditNormal = acc.nature
+        ? acc.nature === 'credit'
+        : acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
 
       if (isCreditNormal) {
         finalBalance = totalCreditos - totalDebitos
@@ -228,8 +229,8 @@ export default function Balancete() {
 
   const getRowStyle = (nivel: number, tipo: string) => {
     if (nivel === 1) return 'bg-primary/10 text-primary font-bold hover:bg-primary/20'
-    if (nivel === 2) return 'bg-muted font-semibold'
-    if (nivel === 3) return 'bg-muted/50 font-medium'
+    if (nivel === 2) return 'bg-muted/60 font-semibold'
+    if (nivel === 3) return 'bg-muted/30 font-medium'
     if (tipo === 'S') return 'font-medium'
     return ''
   }
