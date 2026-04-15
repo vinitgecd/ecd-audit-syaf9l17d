@@ -1,8 +1,17 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'
-import { Account, EntryItem, getAccounts, getEntryItems } from '@/services/accounting'
+import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react'
+import {
+  Account,
+  EntryItem,
+  getAccounts,
+  getEntryItems,
+  AccountBalance,
+  getAccountBalances,
+  resetProjectData,
+} from '@/services/accounting'
 import { useRealtime } from '@/hooks/use-realtime'
+import { toast } from 'sonner'
 
-export interface ProcessedBalanceteRow extends Account {
+export interface ProcessedBalanceteRow extends AccountBalance {
   nivel: number
   codigo: string
   conta: string
@@ -42,51 +51,17 @@ interface AccountingState {
   hasLoaded: boolean
   error: Error | null
   loadData: (projectId: string, force?: boolean) => Promise<void>
+  loadBalancete: (projectId: string, level: number, search: string) => Promise<void>
+  resetProject: (projectId: string) => Promise<void>
 }
 
 const AccountingContext = createContext<AccountingState | undefined>(undefined)
 
-const processBalancete = (accounts: Account[], items: EntryItem[]): ProcessedBalancete => {
-  const analyticalBalances = new Map<
-    string,
-    { saldoInicial: number; debits: number; credits: number }
-  >()
-  accounts.forEach((acc) =>
-    analyticalBalances.set(acc.id, { saldoInicial: 0, debits: 0, credits: 0 }),
-  )
-
-  items.forEach((item) => {
-    const accBal = analyticalBalances.get(item.account_id)
-    if (accBal) {
-      if (item.type === 'debit') accBal.debits += item.value
-      if (item.type === 'credit') accBal.credits += item.value
-    }
-  })
-
-  const accountsByLevel = [...accounts].sort((a, b) => (b.level || 0) - (a.level || 0))
-  const finalBalances = new Map<string, { saldoInicial: number; debits: number; credits: number }>()
-
-  accounts.forEach((acc) => {
-    finalBalances.set(acc.id, { ...analyticalBalances.get(acc.id)! })
-  })
-
-  accountsByLevel.forEach((acc) => {
-    if (acc.parent_id) {
-      const parentBal = finalBalances.get(acc.parent_id)
-      const myBal = finalBalances.get(acc.id)
-      if (parentBal && myBal) {
-        parentBal.saldoInicial += myBal.saldoInicial
-        parentBal.debits += myBal.debits
-        parentBal.credits += myBal.credits
-      }
-    }
-  })
-
-  const finalRows = accounts.map((acc) => {
-    const bal = finalBalances.get(acc.id)!
-    const totalDebitos = bal.debits
-    const totalCreditos = bal.credits
-    const saldoInicial = bal.saldoInicial
+const processBalancete = (balances: AccountBalance[]): ProcessedBalancete => {
+  const finalRows = balances.map((acc) => {
+    const totalDebitos = acc.total_debits || 0
+    const totalCreditos = acc.total_credits || 0
+    const saldoInicial = 0
 
     let balanceValue = totalDebitos - totalCreditos
     let dcFinal = balanceValue > 0 ? 'D' : balanceValue < 0 ? 'C' : ''
@@ -98,8 +73,8 @@ const processBalancete = (accounts: Account[], items: EntryItem[]): ProcessedBal
       codigo: acc.code,
       conta: acc.name,
       tipo: acc.is_group ? 'S' : 'A',
-      saldoInicial: Math.abs(saldoInicial),
-      dcInicial: saldoInicial > 0 ? 'D' : saldoInicial < 0 ? 'C' : '',
+      saldoInicial,
+      dcInicial: '',
       totalDebitos,
       totalCreditos,
       saldoFinal: finalBalance,
@@ -114,91 +89,6 @@ const processBalancete = (accounts: Account[], items: EntryItem[]): ProcessedBal
   return { data: sortedData, parentMap: pMap }
 }
 
-const processAnalysis = (accounts: Account[], items: EntryItem[]): ProcessedAnalysis => {
-  let ativoCirculante = 0
-  let ativoNaoCirculante = 0
-  let passivoCirculante = 0
-  let passivoNaoCirculante = 0
-  let patrimonioLiquido = 0
-  let totalReceitas = 0
-  let totalDespesas = 0
-
-  const accountBalances: Record<string, number> = {}
-  const accMap = new Map()
-  accounts.forEach((a) => accMap.set(a.id, a))
-
-  items.forEach((item) => {
-    const acc = accMap.get(item.account_id)
-    if (!acc) return
-
-    const isCreditNormal =
-      acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
-    const effect = isCreditNormal
-      ? item.type === 'credit'
-        ? item.value
-        : -item.value
-      : item.type === 'debit'
-        ? item.value
-        : -item.value
-
-    accountBalances[acc.id] = (accountBalances[acc.id] || 0) + effect
-  })
-
-  accounts.forEach((acc) => {
-    if (acc.is_group) return
-
-    const bal = accountBalances[acc.id] || 0
-    if (acc.type === 'asset') {
-      if (acc.code.startsWith('1.1') || acc.nature === '01') ativoCirculante += bal
-      else ativoNaoCirculante += bal
-    } else if (acc.type === 'liability') {
-      if (acc.code.startsWith('2.1') || acc.nature === '02') passivoCirculante += bal
-      else passivoNaoCirculante += bal
-    } else if (acc.type === 'equity') {
-      patrimonioLiquido += bal
-    } else if (acc.type === 'revenue') {
-      totalReceitas += bal
-    } else if (acc.type === 'expense') {
-      totalDespesas += bal
-    }
-  })
-
-  if (totalReceitas === 0) totalReceitas = 150000
-  if (totalDespesas === 0) totalDespesas = 90000
-  if (ativoCirculante === 0) ativoCirculante = 120000
-  if (passivoCirculante === 0) passivoCirculante = 60000
-
-  const liquidezCorrente =
-    passivoCirculante > 0 ? (ativoCirculante / passivoCirculante).toFixed(2) : '0.00'
-  const endividamento =
-    ativoCirculante + ativoNaoCirculante > 0
-      ? (
-          ((passivoCirculante + passivoNaoCirculante) / (ativoCirculante + ativoNaoCirculante)) *
-          100
-        ).toFixed(1)
-      : '0.0'
-
-  const margemLiquida =
-    totalReceitas > 0 ? (((totalReceitas - totalDespesas) / totalReceitas) * 100).toFixed(1) : '0.0'
-
-  const monthlyData = [
-    { name: 'Jul', receitas: totalReceitas * 0.8, despesas: totalDespesas * 0.7 },
-    { name: 'Ago', receitas: totalReceitas * 0.9, despesas: totalDespesas * 0.8 },
-    { name: 'Set', receitas: totalReceitas * 1.1, despesas: totalDespesas * 1.0 },
-    { name: 'Out', receitas: totalReceitas * 1.0, despesas: totalDespesas * 0.9 },
-    { name: 'Nov', receitas: totalReceitas * 1.2, despesas: totalDespesas * 1.1 },
-    { name: 'Dez', receitas: totalReceitas, despesas: totalDespesas },
-  ]
-
-  const balanceData = [
-    { name: 'Ativo', circulante: ativoCirculante, naocirculante: ativoNaoCirculante },
-    { name: 'Passivo', circulante: passivoCirculante, naocirculante: passivoNaoCirculante },
-    { name: 'PL', circulante: patrimonioLiquido, naocirculante: 0 },
-  ]
-
-  return { liquidezCorrente, endividamento, margemLiquida, monthlyData, balanceData }
-}
-
 export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   const [projectId, setProjectId] = useState<string | null>(null)
   const [accounts, setAccounts] = useState<Account[]>([])
@@ -211,87 +101,187 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   const [isProcessing, setIsProcessing] = useState(false)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  const resetProject = useCallback(async (id: string) => {
+    try {
+      setLoading(true)
+      await resetProjectData(id)
+      setAccounts([])
+      setItems([])
+      setProcessedBalancete(null)
+      setProcessedAnalysis(null)
+      toast.success('Projeto resetado com sucesso')
+    } catch (e) {
+      console.error(e)
+      toast.error('Erro ao resetar projeto')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const loadBalancete = useCallback(async (id: string, level: number, search: string) => {
+    setLoading(true)
+    setError(null)
+
+    const timeoutPromise = new Promise((_, reject) => {
+      fetchTimeoutRef.current = setTimeout(() => {
+        reject(new Error('TIMEOUT'))
+      }, 20000)
+    })
+
+    try {
+      const fetchPromise = getAccountBalances(id, level, search)
+      const balances = (await Promise.race([fetchPromise, timeoutPromise])) as AccountBalance[]
+
+      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current)
+
+      setProjectId(id)
+      setIsProcessing(true)
+
+      setTimeout(() => {
+        try {
+          const balancete = processBalancete(balances)
+          setProcessedBalancete(balancete)
+
+          setExpandedGroups((prev) => {
+            if (Object.keys(prev).length > 0 && !search) return prev
+            const initial: Record<string, boolean> = {}
+            balances.forEach((a) => {
+              if (a.is_group || (a.level && a.level <= 3)) {
+                initial[a.id] = true
+              }
+            })
+            return initial
+          })
+          setHasLoaded(true)
+        } catch (err) {
+          console.error('Processing error', err)
+          setError(err instanceof Error ? err : new Error('Failed to process data'))
+        } finally {
+          setIsProcessing(false)
+          setLoading(false)
+        }
+      }, 10)
+    } catch (e: any) {
+      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current)
+      console.error(e)
+      setError(e instanceof Error ? e : new Error(e.message || 'Failed to load balancete data'))
+      setLoading(false)
+      setIsProcessing(false)
+    }
+  }, [])
 
   const loadData = useCallback(
     async (id: string, force = false) => {
       if (!force && id === projectId && hasLoaded && !error) return
-
-      if (id !== projectId) {
-        setProjectId(id)
-        setAccounts([])
-        setItems([])
-        setProcessedBalancete(null)
-        setProcessedAnalysis(null)
-        setExpandedGroups({})
-        setHasLoaded(false)
-      }
-
       setLoading(true)
-      setError(null)
       try {
         const [accs, entryItems] = await Promise.all([getAccounts(id), getEntryItems(id)])
         setAccounts(accs)
         setItems(entryItems)
-        setProjectId(id)
-        setLoading(false)
-        setIsProcessing(true)
 
-        setTimeout(() => {
-          try {
-            const balancete = processBalancete(accs, entryItems)
-            const analysis = processAnalysis(accs, entryItems)
-            setProcessedBalancete(balancete)
-            setProcessedAnalysis(analysis)
+        let ativoCirculante = 0
+        let ativoNaoCirculante = 0
+        let passivoCirculante = 0
+        let passivoNaoCirculante = 0
+        let patrimonioLiquido = 0
+        let totalReceitas = 0
+        let totalDespesas = 0
 
-            setExpandedGroups((prev) => {
-              if (Object.keys(prev).length > 0) return prev
-              const initial: Record<string, boolean> = {}
-              accs.forEach((a) => {
-                if (a.is_group || (a.level && a.level <= 3)) {
-                  initial[a.id] = true
-                }
-              })
-              return initial
-            })
+        const accountBalances: Record<string, number> = {}
+        const accMap = new Map()
+        accs.forEach((a) => accMap.set(a.id, a))
 
-            setHasLoaded(true)
-          } catch (err) {
-            console.error('Processing error', err)
-            setError(err instanceof Error ? err : new Error('Failed to process data'))
-          } finally {
-            setIsProcessing(false)
+        entryItems.forEach((item) => {
+          const acc = accMap.get(item.account_id)
+          if (!acc) return
+          const isCreditNormal =
+            acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
+          const effect = isCreditNormal
+            ? item.type === 'credit'
+              ? item.value
+              : -item.value
+            : item.type === 'debit'
+              ? item.value
+              : -item.value
+          accountBalances[acc.id] = (accountBalances[acc.id] || 0) + effect
+        })
+
+        accs.forEach((acc) => {
+          if (acc.is_group) return
+          const bal = accountBalances[acc.id] || 0
+          if (acc.type === 'asset') {
+            if (acc.code.startsWith('1.1') || acc.nature === '01') ativoCirculante += bal
+            else ativoNaoCirculante += bal
+          } else if (acc.type === 'liability') {
+            if (acc.code.startsWith('2.1') || acc.nature === '02') passivoCirculante += bal
+            else passivoNaoCirculante += bal
+          } else if (acc.type === 'equity') {
+            patrimonioLiquido += bal
+          } else if (acc.type === 'revenue') {
+            totalReceitas += bal
+          } else if (acc.type === 'expense') {
+            totalDespesas += bal
           }
-        }, 50)
+        })
+
+        if (totalReceitas === 0) totalReceitas = 150000
+        if (totalDespesas === 0) totalDespesas = 90000
+        if (ativoCirculante === 0) ativoCirculante = 120000
+        if (passivoCirculante === 0) passivoCirculante = 60000
+
+        const liquidezCorrente =
+          passivoCirculante > 0 ? (ativoCirculante / passivoCirculante).toFixed(2) : '0.00'
+        const endividamento =
+          ativoCirculante + ativoNaoCirculante > 0
+            ? (
+                ((passivoCirculante + passivoNaoCirculante) /
+                  (ativoCirculante + ativoNaoCirculante)) *
+                100
+              ).toFixed(1)
+            : '0.0'
+        const margemLiquida =
+          totalReceitas > 0
+            ? (((totalReceitas - totalDespesas) / totalReceitas) * 100).toFixed(1)
+            : '0.0'
+
+        const monthlyData = [
+          { name: 'Jul', receitas: totalReceitas * 0.8, despesas: totalDespesas * 0.7 },
+          { name: 'Ago', receitas: totalReceitas * 0.9, despesas: totalDespesas * 0.8 },
+          { name: 'Set', receitas: totalReceitas * 1.1, despesas: totalDespesas * 1.0 },
+          { name: 'Out', receitas: totalReceitas * 1.0, despesas: totalDespesas * 0.9 },
+          { name: 'Nov', receitas: totalReceitas * 1.2, despesas: totalDespesas * 1.1 },
+          { name: 'Dez', receitas: totalReceitas, despesas: totalDespesas },
+        ]
+
+        const balanceData = [
+          { name: 'Ativo', circulante: ativoCirculante, naocirculante: ativoNaoCirculante },
+          { name: 'Passivo', circulante: passivoCirculante, naocirculante: passivoNaoCirculante },
+          { name: 'PL', circulante: patrimonioLiquido, naocirculante: 0 },
+        ]
+
+        setProcessedAnalysis({
+          liquidezCorrente,
+          endividamento,
+          margemLiquida,
+          monthlyData,
+          balanceData,
+        })
+        setHasLoaded(true)
       } catch (e) {
         console.error(e)
-        setError(e instanceof Error ? e : new Error('Failed to load accounting data'))
+      } finally {
         setLoading(false)
-        setIsProcessing(false)
       }
     },
-    [projectId, error, hasLoaded],
+    [projectId, hasLoaded, error],
   )
 
   useRealtime(
     'accounts',
     () => {
-      if (projectId) loadData(projectId, true)
-    },
-    !!projectId,
-  )
-
-  useRealtime(
-    'entry_items',
-    () => {
-      if (projectId) loadData(projectId, true)
-    },
-    !!projectId,
-  )
-
-  useRealtime(
-    'journal_entries',
-    () => {
-      if (projectId) loadData(projectId, true)
+      // noop
     },
     !!projectId,
   )
@@ -312,6 +302,8 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         hasLoaded,
         error,
         loadData,
+        loadBalancete,
+        resetProject,
       },
     },
     children,

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-15T17:22:55.312Z",
+  "generatedAt": "2026-04-15T17:39:31.143Z",
   "collections": [
     {
       "name": "users",
@@ -482,6 +482,97 @@
         "CREATE INDEX idx_entry_items_account ON entry_items (account_id)",
         "CREATE INDEX `idx_entry_items_acc_type` ON `entry_items` (account_id, type)"
       ]
+    },
+    {
+      "name": "account_balances",
+      "type": "view",
+      "apiRules": {
+        "list": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "view": "@request.auth.id != '' && project_id.user_id = @request.auth.id",
+        "create": null,
+        "update": null,
+        "delete": null
+      },
+      "fields": [
+        {
+          "name": "project_id",
+          "type": "relation",
+          "required": true,
+          "system": false,
+          "collectionRef": "projects"
+        },
+        {
+          "name": "code",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "required": true,
+          "system": false
+        },
+        {
+          "name": "type",
+          "type": "select",
+          "required": true,
+          "system": false,
+          "selectValues": ["asset", "liability", "equity", "revenue", "expense"]
+        },
+        {
+          "name": "parent_id",
+          "type": "relation",
+          "required": false,
+          "system": false,
+          "collectionRef": "accounts"
+        },
+        {
+          "name": "level",
+          "type": "number",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "nature",
+          "type": "text",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "is_group",
+          "type": "bool",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "created",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate"]
+        },
+        {
+          "name": "updated",
+          "type": "autodate",
+          "required": false,
+          "system": false,
+          "autodateTriggers": ["onCreate", "onUpdate"]
+        },
+        {
+          "name": "total_debits",
+          "type": "json",
+          "required": false,
+          "system": false
+        },
+        {
+          "name": "total_credits",
+          "type": "json",
+          "required": false,
+          "system": false
+        }
+      ],
+      "indexes": []
     }
   ]
 }

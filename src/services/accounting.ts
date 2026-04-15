@@ -1,5 +1,10 @@
 import pb from '@/lib/pocketbase/client'
 
+export interface AccountBalance extends Account {
+  total_debits: number
+  total_credits: number
+}
+
 export interface Account {
   id: string
   project_id: string
@@ -59,6 +64,26 @@ export const getAccounts = (projectId: string) =>
     filter: `project_id = "${projectId}"`,
     sort: 'code',
   })
+
+export const getAccountBalances = async (projectId: string, level?: number, search?: string) => {
+  let filter = `project_id = "${projectId}"`
+  if (level) filter += ` && level <= ${level}`
+  if (search) {
+    const s = search.replace(/"/g, '\\"')
+    filter += ` && (code ~ "${s}" || name ~ "${s}")`
+  }
+
+  const result = await pb.collection('account_balances').getFullList<AccountBalance>({
+    filter,
+    sort: 'code',
+    $cancelKey: `balancete_${projectId}_${level}_${search}`,
+  })
+
+  return result
+}
+
+export const resetProjectData = (projectId: string) =>
+  pb.send(`/backend/v1/projects/${projectId}/reset`, { method: 'POST' })
 
 export const getEntryItems = (projectId: string) =>
   pb.collection('entry_items').getFullList<EntryItem>({

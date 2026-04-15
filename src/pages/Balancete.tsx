@@ -41,24 +41,31 @@ export default function Balancete() {
   const { projectId } = useParams()
 
   const {
-    accounts,
     loading,
     isProcessing,
     error,
-    loadData,
+    loadBalancete,
+    resetProject,
     processedBalancete,
     expandedGroups,
     setExpandedGroups,
   } = useAccountingStore()
 
   const [searchTerm, setSearchTerm] = useState('')
-  const deferredSearchTerm = useDeferredValue(searchTerm)
+  const [debouncedSearch, setDebouncedSearch] = useState('')
 
   const [category, setCategory] = useState<string>('all')
-  const deferredCategory = useDeferredValue(category)
 
-  const [maxNivel, setMaxNivel] = useState('20')
-  const deferredMaxNivel = useDeferredValue(maxNivel)
+  const [maxNivel, setMaxNivel] = useState('4')
+  const [debouncedNivel, setDebouncedNivel] = useState('4')
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchTerm)
+      setDebouncedNivel(maxNivel)
+    }, 500)
+    return () => clearTimeout(timer)
+  }, [searchTerm, maxNivel])
 
   // Virtualization constants and state
   const ROW_HEIGHT = 40
@@ -87,9 +94,9 @@ export default function Balancete() {
 
   useEffect(() => {
     if (projectId) {
-      loadData(projectId)
+      loadBalancete(projectId, parseInt(debouncedNivel || '4', 10), debouncedSearch)
     }
-  }, [projectId, loadData])
+  }, [projectId, debouncedNivel, debouncedSearch, loadBalancete])
 
   const toggleGroup = useCallback(
     (id: string, e: React.MouseEvent) => {
@@ -127,15 +134,11 @@ export default function Balancete() {
 
   const filteredData = useMemo(() => {
     return processedData.filter((row) => {
-      const matchesSearch =
-        row.conta.toLowerCase().includes(deferredSearchTerm.toLowerCase()) ||
-        row.codigo.toLowerCase().includes(deferredSearchTerm.toLowerCase())
       const matchesCategory =
-        deferredCategory === 'all' || row.categoria.toLowerCase() === deferredCategory.toLowerCase()
-      const matchesNivel = row.nivel <= parseInt(deferredMaxNivel || '20', 10)
+        category === 'all' || row.categoria.toLowerCase() === category.toLowerCase()
 
       let isVisible = true
-      if (!matchesSearch && deferredSearchTerm === '') {
+      if (!debouncedSearch) {
         let curr = row.parent_id
         while (curr) {
           if (expandedGroups[curr] === false) {
@@ -146,16 +149,9 @@ export default function Balancete() {
         }
       }
 
-      return matchesSearch && matchesCategory && matchesNivel && isVisible
+      return matchesCategory && isVisible
     })
-  }, [
-    processedData,
-    parentMap,
-    deferredSearchTerm,
-    deferredCategory,
-    deferredMaxNivel,
-    expandedGroups,
-  ])
+  }, [processedData, parentMap, debouncedSearch, category, expandedGroups])
 
   const getRowStyle = (nivel: number, tipo: string) => {
     if (nivel === 1) return 'bg-primary/10 text-primary font-bold hover:bg-primary/20'
@@ -262,7 +258,7 @@ export default function Balancete() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {hasTimeout ? (
+            {hasTimeout || error?.message === 'TIMEOUT' ? (
               <TableRow>
                 <TableCell colSpan={10} className="h-[400px] text-center">
                   <div className="flex flex-col items-center justify-center gap-4">
@@ -278,14 +274,17 @@ export default function Balancete() {
                     <div className="flex items-center gap-3 mt-2">
                       <Button
                         variant="outline"
-                        onClick={() => projectId && loadData(projectId, true)}
+                        onClick={() => {
+                          setMaxNivel('1')
+                          if (projectId) loadBalancete(projectId, 1, debouncedSearch)
+                        }}
                       >
                         <RefreshCw className="mr-2 h-4 w-4" />
                         Tentar Novamente
                       </Button>
                       <Button
                         variant="destructive"
-                        onClick={() => navigate(`/projects/${projectId}/settings`)}
+                        onClick={() => projectId && resetProject(projectId)}
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
                         Resetar Projeto
@@ -319,7 +318,7 @@ export default function Balancete() {
                   </div>
                 </TableCell>
               </TableRow>
-            ) : error ? (
+            ) : error && error.message !== 'TIMEOUT' ? (
               <TableRow>
                 <TableCell colSpan={10} className="h-32 text-center">
                   <div className="flex flex-col items-center justify-center text-muted-foreground gap-4">
@@ -328,7 +327,14 @@ export default function Balancete() {
                     </p>
                     <Button
                       variant="outline"
-                      onClick={() => projectId && loadData(projectId, true)}
+                      onClick={() =>
+                        projectId &&
+                        loadBalancete(
+                          projectId,
+                          parseInt(debouncedNivel || '4', 10),
+                          debouncedSearch,
+                        )
+                      }
                     >
                       <RefreshCw className="mr-2 h-4 w-4" />
                       Tentar Novamente
@@ -336,7 +342,7 @@ export default function Balancete() {
                   </div>
                 </TableCell>
               </TableRow>
-            ) : accounts.length === 0 ? (
+            ) : processedData.length === 0 && !debouncedSearch ? (
               <TableRow>
                 <TableCell colSpan={10} className="h-32 text-center">
                   <div className="flex flex-col items-center justify-center text-muted-foreground gap-2 py-8">
