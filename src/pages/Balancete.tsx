@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import {
   FileText,
   Table as TableIcon,
@@ -42,36 +42,19 @@ const formatNum = (val: number) =>
 
 export default function Balancete() {
   const navigate = useNavigate()
+  const { projectId } = useParams()
   const [searchTerm, setSearchTerm] = useState('')
   const [category, setCategory] = useState<string>('all')
   const [maxNivel, setMaxNivel] = useState('20')
 
-  const [projects, setProjects] = useState<any[]>([])
-  const [selectedProjectId, setSelectedProjectId] = useState<string>('')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [items, setItems] = useState<EntryItem[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    getAccountingProjects()
-      .then((data) => {
-        setProjects(data)
-        if (data.length > 0) {
-          setSelectedProjectId(data[0].id)
-        } else {
-          setLoading(false)
-        }
-      })
-      .catch(() => setLoading(false))
-  }, [])
-
-  const loadData = async (projectId: string) => {
+  const loadData = async (id: string) => {
     setLoading(true)
     try {
-      const [accs, entryItems] = await Promise.all([
-        getAccounts(projectId),
-        getEntryItems(projectId),
-      ])
+      const [accs, entryItems] = await Promise.all([getAccounts(id), getEntryItems(id)])
       setAccounts(accs)
       setItems(entryItems)
     } catch (e) {
@@ -82,19 +65,19 @@ export default function Balancete() {
   }
 
   useEffect(() => {
-    if (selectedProjectId) {
-      loadData(selectedProjectId)
+    if (projectId) {
+      loadData(projectId)
     }
-  }, [selectedProjectId])
+  }, [projectId])
 
   useRealtime('accounts', () => {
-    if (selectedProjectId) loadData(selectedProjectId)
+    if (projectId) loadData(projectId)
   })
   useRealtime('entry_items', () => {
-    if (selectedProjectId) loadData(selectedProjectId)
+    if (projectId) loadData(projectId)
   })
   useRealtime('journal_entries', () => {
-    if (selectedProjectId) loadData(selectedProjectId)
+    if (projectId) loadData(projectId)
   })
 
   const processedData = useMemo(() => {
@@ -190,20 +173,6 @@ export default function Balancete() {
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card p-4 rounded-lg border shadow-sm gap-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <h2 className="text-lg font-bold text-foreground">Balancete</h2>
-          {projects.length > 0 && (
-            <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>
-              <SelectTrigger className="w-[280px] h-8 font-semibold">
-                <SelectValue placeholder="Selecione um projeto" />
-              </SelectTrigger>
-              <SelectContent>
-                {projects.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>
-                    {p.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
@@ -314,9 +283,7 @@ export default function Balancete() {
                     'cursor-pointer transition-colors py-1 h-10 hover:bg-muted/80',
                     getRowStyle(row.nivel, row.tipo),
                   )}
-                  onClick={() =>
-                    navigate(`/projects/${selectedProjectId}/accounts/${row.id}/ledger`)
-                  }
+                  onClick={() => navigate(`/projects/${projectId}/accounts/${row.id}/ledger`)}
                 >
                   <TableCell className="py-2">{row.nivel}</TableCell>
                   <TableCell className="py-2 font-mono text-xs">{row.codigo}</TableCell>

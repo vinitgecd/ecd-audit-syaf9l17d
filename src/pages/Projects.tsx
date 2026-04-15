@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Table,
@@ -58,6 +59,7 @@ import { useAuth } from '@/hooks/use-auth'
 
 export default function Projects() {
   const { user } = useAuth()
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
@@ -123,7 +125,7 @@ export default function Projects() {
     }
 
     try {
-      await createProject({
+      const newProj = await createProject({
         name: formData.name,
         client: formData.client,
         status: formData.status,
@@ -131,6 +133,7 @@ export default function Projects() {
       setIsCreateOpen(false)
       setFormData({ name: '', client: '', status: 'active' })
       toast({ title: 'Sucesso', description: 'Projeto criado com sucesso.' })
+      navigate(`/projects/${newProj.id}/import`)
     } catch (err) {
       toast({
         variant: 'destructive',
@@ -359,7 +362,11 @@ export default function Projects() {
               </TableHeader>
               <TableBody>
                 {filteredProjects.map((project) => (
-                  <TableRow key={project.id}>
+                  <TableRow
+                    key={project.id}
+                    className="cursor-pointer"
+                    onClick={() => navigate(`/projects/${project.id}/import`)}
+                  >
                     <TableCell className="font-medium">{project.name}</TableCell>
                     <TableCell>{project.client}</TableCell>
                     <TableCell>
@@ -373,11 +380,22 @@ export default function Projects() {
                         : '-'}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
+                      <div className="flex justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => navigate(`/projects/${project.id}/import`)}
+                          className="text-primary hover:text-primary/80 mr-2"
+                        >
+                          Abrir
+                        </Button>
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => handleEdit(project)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleEdit(project)
+                          }}
                           className="h-8 w-8 text-muted-foreground hover:text-foreground"
                         >
                           <Pencil className="h-4 w-4" />
@@ -386,7 +404,10 @@ export default function Projects() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          onClick={() => setProjectToDelete(project.id)}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setProjectToDelete(project.id)
+                          }}
                           className="h-8 w-8 text-muted-foreground hover:text-destructive"
                         >
                           <Trash2 className="h-4 w-4" />

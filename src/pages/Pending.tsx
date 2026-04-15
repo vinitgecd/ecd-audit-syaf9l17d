@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import { getAuditCommentsByProject, AuditComment } from '@/services/audit_comments'
+import { EntryItem, Account } from '@/services/accounting'
 import { AuditCommentModal } from '@/components/AuditCommentModal'
-import { DATA_WITH_IDS } from '@/lib/mock-data'
 import pb from '@/lib/pocketbase/client'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
@@ -17,53 +17,61 @@ import {
 } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Edit2, AlertCircle } from 'lucide-react'
+import { Edit2, AlertCircle, Loader2 } from 'lucide-react'
+import { format, parseISO } from 'date-fns'
+import { cn } from '@/lib/utils'
 
 const formatNum = (val: number) =>
   new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
 
 export default function Pending() {
   const { user } = useAuth()
-  const navigate = useNavigate()
-  const [projectId, setProjectId] = useState<string | null>(null)
+  const { projectId } = useParams()
+
   const [comments, setComments] = useState<AuditComment[]>([])
+  const [entriesMap, setEntriesMap] = useState<Record<string, EntryItem>>({})
   const [loading, setLoading] = useState(true)
 
   const [selectedEntry, setSelectedEntry] = useState<any>(null)
   const [selectedComment, setSelectedComment] = useState<AuditComment | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
 
-  useEffect(() => {
-    if (user?.id) {
-      pb.collection('projects')
-        .getFirstListItem(`user_id = "${user.id}"`)
-        .then((p) => setProjectId(p.id))
-        .catch(() => setProjectId(null))
-    }
-  }, [user])
+  const loadData = async (id: string) => {
+    try {
+      const comms = await getAuditCommentsByProject(id)
+      setComments(comms)
 
-  useEffect(() => {
-    if (projectId) {
-      getAuditCommentsByProject(projectId)
-        .then(setComments)
-        .finally(() => setLoading(false))
-    } else if (projectId === null) {
+      const pendingComms = comms.filter((c) => c.status === 'pending' || c.status === 'rejected')
+
+      if (pendingComms.length > 0) {
+        const itemIds = pendingComms.map((c) => c.entry_reference)
+        // Split IDs into chunks to avoid too long query strings if many
+        const itemsList = await pb.collection('entry_items').getFullList<EntryItem>({
+          filter: itemIds.map((id) => `id="${id}"`).join('||'),
+          expand: 'entry_id,account_id',
+        })
+
+        const eMap: Record<string, EntryItem> = {}
+        itemsList.forEach((i) => (eMap[i.id] = i))
+        setEntriesMap(eMap)
+      }
+    } catch (e) {
+      console.error(e)
+    } finally {
       setLoading(false)
     }
+  }
+
+  useEffect(() => {
+    if (projectId) loadData(projectId)
   }, [projectId])
 
   useRealtime(
     'audit_comments',
     (e) => {
       if (e.record.project_id !== projectId) return
-      if (e.action === 'create') {
-        setComments((prev) => [...prev, e.record as unknown as AuditComment])
-      } else if (e.action === 'update') {
-        setComments((prev) =>
-          prev.map((c) => (c.id === e.record.id ? (e.record as unknown as AuditComment) : c)),
-        )
-      } else if (e.action === 'delete') {
-        setComments((prev) => prev.filter((c) => c.id !== e.record.id))
+      if (e.action === 'create' || e.action === 'update' || e.action === 'delete') {
+        loadData(projectId!)
       }
     },
     !!projectId,
@@ -73,10 +81,25 @@ export default function Pending() {
 
   const rows = pendingComments
     .map((c) => {
-      const entry = DATA_WITH_IDS.find((e) => e.id === c.entry_reference)
-      return { comment: c, entry }
+      const realItem = entriesMap[c.entry_reference]
+      if (realItem) {
+        return {
+          comment: c,
+          entry: {
+            id: realItem.id,
+            data: realItem.expand?.entry_id?.date
+              ? format(parseISO(realItem.expand.entry_id.date), 'dd/MM/yyyy')
+              : '',
+            codigoConta: realItem.expand?.account_id?.code || '',
+            conta: realItem.expand?.account_id?.name || '',
+            valor: realItem.value,
+            dc: realItem.type === 'debit' ? 'D' : 'C',
+          },
+        }
+      }
+      return null
     })
-    .filter((r) => r.entry)
+    .filter(Boolean)
 
   const handleEdit = (row: any) => {
     setSelectedEntry(row.entry)
@@ -93,7 +116,7 @@ export default function Pending() {
             Relatório de Pendências
           </h2>
           <p className="text-muted-foreground mt-1">
-            Gerencie lançamentos com status Pendente ou Reprovado.
+            Gerencie lançamentos de auditoria com status Pendente ou Reprovado.
           </p>
         </div>
       </div>
@@ -102,8 +125,8 @@ export default function Pending() {
         <CardHeader>
           <CardTitle>Lançamentos Aguardando Ação</CardTitle>
           <CardDescription>
-            {rows.length} {rows.length === 1 ? 'item requer' : 'itens requerem'} sua atenção no
-            projeto atual.
+            {rows.length} {rows.length === 1 ? 'item requer' : 'itens requerem'} sua atenção neste
+            projeto.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -122,18 +145,21 @@ export default function Pending() {
               <TableBody>
                 {loading ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8">
-                      Carregando...
+                    <TableCell colSpan={6} className="text-center py-12">
+                      <div className="flex items-center justify-center gap-2 text-muted-foreground">
+                        <Loader2 className="h-5 w-5 animate-spin" /> Carregando pendências...
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : rows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      Nenhuma pendência encontrada no projeto atual.
+                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                      <AlertCircle className="h-8 w-8 text-green-500 mx-auto mb-3 opacity-50" />
+                      Nenhuma pendência encontrada neste projeto. Ótimo trabalho!
                     </TableCell>
                   </TableRow>
                 ) : (
-                  rows.map((row) => (
+                  rows.map((row: any) => (
                     <TableRow key={row.comment.id}>
                       <TableCell className="whitespace-nowrap">{row.entry.data}</TableCell>
                       <TableCell

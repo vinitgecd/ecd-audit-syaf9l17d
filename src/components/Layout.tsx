@@ -41,15 +41,21 @@ export default function Layout() {
 
   if (!user) return <Navigate to="/login" replace />
 
-  const navItems = [
-    { title: 'Dashboard', url: '/', icon: LayoutDashboard },
+  const match = location.pathname.match(/\/projects\/([^\/]+)/)
+  const projectId = match ? match[1] : null
+
+  const mainNavItems = [
+    { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
     { title: 'Projetos', url: '/projects', icon: Folder },
-    { title: 'Importar', url: '/import', icon: Upload },
-    { title: 'Análise Contábil', url: '/analysis', icon: BarChart2 },
-    { title: 'Balancete', url: '/balancete', icon: BookOpen },
-    { title: 'Documentos Fiscais', url: '/documents', icon: FileText },
-    { title: 'Relatório de Pendências', url: '/pending', icon: AlertCircle },
   ]
+
+  const projectNavItems = projectId ? [
+    { title: 'Importar', url: `/projects/${projectId}/import`, icon: Upload },
+    { title: 'Balancete', url: `/projects/${projectId}/balancete`, icon: BookOpen },
+    { title: 'Análise Contábil', url: `/projects/${projectId}/analysis`, icon: BarChart2 },
+    { title: 'Documentos Fiscais', url: `/projects/${projectId}/documents`, icon: FileText },
+    { title: 'Pendências', url: `/projects/${projectId}/pending`, icon: AlertCircle },
+  ] : []
 
   return (
     <SidebarProvider>
@@ -67,11 +73,11 @@ export default function Layout() {
               <SidebarGroupLabel>Menu Principal</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navItems.map((item) => (
+                  {mainNavItems.map((item) => (
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
                         asChild
-                        isActive={location.pathname === item.url}
+                        isActive={location.pathname === item.url || (item.url === '/projects' && !projectId && location.pathname.startsWith('/projects'))}
                         tooltip={item.title}
                       >
                         <Link to={item.url}>
@@ -83,6 +89,31 @@ export default function Layout() {
                   ))}
                 </SidebarMenu>
               </SidebarGroupContent>
+            </SidebarGroup>
+            
+            {projectId && (
+              <SidebarGroup>
+                <SidebarGroupLabel>Projeto Atual</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <SidebarMenu>
+                    {projectNavItems.map((item) => (
+                      <SidebarMenuItem key={item.title}>
+                        <SidebarMenuButton
+                          asChild
+                          isActive={location.pathname.startsWith(item.url)}
+                          tooltip={item.title}
+                        >
+                          <Link to={item.url}>
+                            <item.icon />
+                            <span>{item.title}</span>
+                          </Link>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    ))}
+                  </SidebarMenu>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            )}
             </SidebarGroup>
           </SidebarContent>
         </Sidebar>

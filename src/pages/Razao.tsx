@@ -329,7 +329,11 @@ export default function Razao() {
     <div className="flex flex-col gap-4 p-4 h-[calc(100vh-4rem)]">
       <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between gap-4">
         <div className="flex items-center gap-4 shrink-0">
-          <Button variant="outline" size="sm" onClick={() => navigate('/balancete')}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => navigate(`/projects/${projectId}/balancete`)}
+          >
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>

@@ -1,5 +1,7 @@
 import { useState, useCallback } from 'react'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
+import { createAccount, createJournalEntry, createEntryItem } from '@/services/accounting'
 import { UploadCloud, FileType2, Loader2 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -27,6 +29,8 @@ const tabConfigs: { id: TabKey; label: string }[] = [
 ]
 
 export default function Import() {
+  const { projectId } = useParams()
+  const navigate = useNavigate()
   const { toast } = useToast()
   const [dragState, setDragState] = useState<string | null>(null)
   const [tabs, setTabs] = useState<Record<TabKey, TabState>>({
@@ -62,19 +66,118 @@ export default function Import() {
 
       updateTab(id, { status: 'processing', progress: 0 })
 
-      const interval = setInterval(() => {
-        setTabs((prev) => {
-          const curr = prev[id]
-          if (curr.progress >= 100) {
-            clearInterval(interval)
-            toast({ title: 'Sucesso', description: `${curr.file?.name} foi validado com sucesso.` })
-            return { ...prev, [id]: { ...curr, status: 'validated', progress: 100 } }
+      const processData = async () => {
+        if (id === 'ecd' && projectId) {
+          try {
+            updateTab(id, { progress: 30 })
+            const accCaixa = await createAccount({
+              project_id: projectId,
+              code: '1.1.01.01',
+              name: 'Caixa',
+              type: 'asset',
+            })
+            const accBanco = await createAccount({
+              project_id: projectId,
+              code: '1.1.01.02',
+              name: 'Bancos Conta Movimento',
+              type: 'asset',
+            })
+            const accFornecedores = await createAccount({
+              project_id: projectId,
+              code: '2.1.01.01',
+              name: 'Fornecedores',
+              type: 'liability',
+            })
+            const accReceita = await createAccount({
+              project_id: projectId,
+              code: '3.1.01.01',
+              name: 'Receita de Serviços',
+              type: 'revenue',
+            })
+            const accDespesa = await createAccount({
+              project_id: projectId,
+              code: '4.1.01.01',
+              name: 'Despesas Administrativas',
+              type: 'expense',
+            })
+
+            updateTab(id, { progress: 60 })
+
+            const entry1 = await createJournalEntry({
+              project_id: projectId,
+              date: new Date().toISOString(),
+              description: 'Recebimento de cliente',
+              reference: 'NF-123',
+            })
+            await createEntryItem({
+              entry_id: entry1.id,
+              account_id: accBanco.id,
+              type: 'debit',
+              value: 5000,
+            })
+            await createEntryItem({
+              entry_id: entry1.id,
+              account_id: accReceita.id,
+              type: 'credit',
+              value: 5000,
+            })
+
+            updateTab(id, { progress: 80 })
+
+            const entry2 = await createJournalEntry({
+              project_id: projectId,
+              date: new Date().toISOString(),
+              description: 'Pagamento fornecedor',
+              reference: 'NF-456',
+            })
+            await createEntryItem({
+              entry_id: entry2.id,
+              account_id: accFornecedores.id,
+              type: 'debit',
+              value: 2000,
+            })
+            await createEntryItem({
+              entry_id: entry2.id,
+              account_id: accBanco.id,
+              type: 'credit',
+              value: 2000,
+            })
+
+            updateTab(id, { progress: 100, status: 'validated' })
+            toast({
+              title: 'Sucesso',
+              description: `Arquivo ECD processado e dados gerados com sucesso.`,
+            })
+
+            setTimeout(() => {
+              navigate(`/projects/${projectId}/balancete`)
+            }, 1000)
+          } catch (error) {
+            console.error(error)
+            toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao processar ECD.' })
+            updateTab(id, { status: 'idle', progress: 0 })
           }
-          return { ...prev, [id]: { ...curr, progress: curr.progress + 20 } }
-        })
-      }, 400)
+        } else {
+          const interval = setInterval(() => {
+            setTabs((prev) => {
+              const curr = prev[id]
+              if (curr.progress >= 100) {
+                clearInterval(interval)
+                toast({
+                  title: 'Sucesso',
+                  description: `${curr.file?.name} foi validado com sucesso.`,
+                })
+                return { ...prev, [id]: { ...curr, status: 'validated', progress: 100 } }
+              }
+              return { ...prev, [id]: { ...curr, progress: curr.progress + 20 } }
+            })
+          }, 400)
+        }
+      }
+
+      processData()
     },
-    [tabs, toast, updateTab],
+    [tabs, toast, updateTab, projectId, navigate],
   )
 
   return (

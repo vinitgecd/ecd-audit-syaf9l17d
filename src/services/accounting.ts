@@ -34,6 +34,15 @@ export interface EntryItem {
   }
 }
 
+export const createAccount = (data: Partial<Account>) =>
+  pb.collection('accounts').create<Account>(data)
+
+export const createJournalEntry = (data: Partial<JournalEntry>) =>
+  pb.collection('journal_entries').create<JournalEntry>(data)
+
+export const createEntryItem = (data: Partial<EntryItem>) =>
+  pb.collection('entry_items').create<EntryItem>(data)
+
 export const getAccountingProjects = () =>
   pb.collection('projects').getFullList({ sort: '-created' })
 
