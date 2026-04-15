@@ -49,43 +49,43 @@ export default function Razao() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
-  const fetchLedgerData = () => {
+  const fetchLedgerData = async () => {
     if (!accountId || !projectId) return
     setLoading(true)
     setError(null)
 
-    Promise.all([
-      getAccount(accountId),
-      getAccountEntries(accountId, projectId),
-      getAuditCommentsByProject(projectId),
-    ])
-      .then(async ([acc, mainEntries, auditCommentsList]) => {
-        setAccount(acc)
-        setEntries(mainEntries)
+    try {
+      const [acc, mainEntries, auditCommentsList] = await Promise.all([
+        getAccount(accountId),
+        getAccountEntries(accountId, projectId),
+        getAuditCommentsByProject(projectId),
+      ])
 
-        const cMap: Record<string, AuditComment> = {}
-        auditCommentsList.forEach((c) => {
-          cMap[c.entry_reference] = c
-        })
-        setComments(cMap)
+      setAccount(acc)
+      setEntries(mainEntries)
 
-        const entryIds = Array.from(new Set(mainEntries.map((e) => e.entry_id)))
-        const allItems = await getEntryItemsByEntryIds(entryIds)
-
-        const cpMap: Record<string, EntryItem[]> = {}
-        allItems.forEach((item) => {
-          if (!cpMap[item.entry_id]) cpMap[item.entry_id] = []
-          cpMap[item.entry_id].push(item)
-        })
-        setCounterparts(cpMap)
-
-        setLoading(false)
+      const cMap: Record<string, AuditComment> = {}
+      auditCommentsList.forEach((c) => {
+        cMap[c.entry_reference] = c
       })
-      .catch((err) => {
-        console.error(err)
-        setError('Falha ao carregar os dados do razão analítico.')
-        setLoading(false)
+      setComments(cMap)
+
+      const entryIds = Array.from(new Set(mainEntries.map((e) => e.entry_id)))
+      const allItems = await getEntryItemsByEntryIds(entryIds)
+
+      const cpMap: Record<string, EntryItem[]> = {}
+      allItems.forEach((item) => {
+        if (!cpMap[item.entry_id]) cpMap[item.entry_id] = []
+        cpMap[item.entry_id].push(item)
       })
+      setCounterparts(cpMap)
+
+      setLoading(false)
+    } catch (err) {
+      console.error(err)
+      setError('Falha ao carregar os dados do razão analítico. Por favor, tente novamente.')
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
