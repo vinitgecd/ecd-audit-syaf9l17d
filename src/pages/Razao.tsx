@@ -349,7 +349,7 @@ export default function Razao() {
             onClick={() => navigate(`/projects/${projectId}/balancete`)}
           >
             <ArrowLeft className="h-4 w-4 mr-2" />
-            Voltar
+            Voltar para o Balancete
           </Button>
           <div className="flex flex-col">
             <h2 className="text-xl font-bold text-foreground">Razão Analítico</h2>
@@ -516,9 +516,8 @@ export default function Razao() {
                   <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
                     <FileText className="h-8 w-8 opacity-50" />
                     <p className="font-medium text-base text-foreground">
-                      Nenhum lançamento encontrado para o período ou critérios selecionados
+                      Nenhum lançamento encontrado para esta conta.
                     </p>
-                    <p className="text-sm">Não há dados de razão para esta conta.</p>
                     <p className="text-xs opacity-75 mt-1">
                       Verifique se o arquivo ECD contém movimentos para esta conta.
                     </p>
