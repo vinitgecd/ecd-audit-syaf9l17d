@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   FileText,
@@ -37,14 +37,45 @@ const formatNum = (val: number) =>
 export default function Balancete() {
   const navigate = useNavigate()
   const { projectId } = useParams()
+
   const [searchTerm, setSearchTerm] = useState('')
+  const deferredSearchTerm = useDeferredValue(searchTerm)
+
   const [category, setCategory] = useState<string>('all')
+  const deferredCategory = useDeferredValue(category)
+
   const [maxNivel, setMaxNivel] = useState('20')
+  const deferredMaxNivel = useDeferredValue(maxNivel)
 
   const [accounts, setAccounts] = useState<Account[]>([])
   const [items, setItems] = useState<EntryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+
+  // Virtualization constants and state
+  const ROW_HEIGHT = 40
+  const MathMax = Math.max
+  const MathMin = Math.min
+  const OVERSCAN = 15
+
+  const [scrollTop, setScrollTop] = useState(0)
+  const [containerHeight, setContainerHeight] = useState(600)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!containerRef.current) return
+    const resizeObserver = new ResizeObserver((entries) => {
+      if (entries[0]) {
+        setContainerHeight(entries[0].contentRect.height)
+      }
+    })
+    resizeObserver.observe(containerRef.current)
+    return () => resizeObserver.disconnect()
+  }, [])
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
 
   const loadData = async (id: string) => {
     setLoading(true)
@@ -55,7 +86,7 @@ export default function Balancete() {
 
       const initialExpanded: Record<string, boolean> = {}
       accs.forEach((a) => {
-        if (a.is_group || a.level! <= 3) {
+        if (a.is_group || (a.level && a.level <= 3)) {
           initialExpanded[a.id] = true
         }
       })
@@ -88,9 +119,14 @@ export default function Balancete() {
     setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }))
   }, [])
 
-  const processedData = useMemo(() => {
-    const analyticalBalances = new Map<string, { debits: number; credits: number }>()
-    accounts.forEach((acc) => analyticalBalances.set(acc.id, { debits: 0, credits: 0 }))
+  const { processedData, parentMap } = useMemo(() => {
+    const analyticalBalances = new Map<
+      string,
+      { saldoInicial: number; debits: number; credits: number }
+    >()
+    accounts.forEach((acc) =>
+      analyticalBalances.set(acc.id, { saldoInicial: 0, debits: 0, credits: 0 }),
+    )
 
     items.forEach((item) => {
       const accBal = analyticalBalances.get(item.account_id)
@@ -101,7 +137,10 @@ export default function Balancete() {
     })
 
     const accountsByLevel = [...accounts].sort((a, b) => (b.level || 0) - (a.level || 0))
-    const finalBalances = new Map<string, { debits: number; credits: number }>()
+    const finalBalances = new Map<
+      string,
+      { saldoInicial: number; debits: number; credits: number }
+    >()
 
     accounts.forEach((acc) => {
       finalBalances.set(acc.id, { ...analyticalBalances.get(acc.id)! })
@@ -112,6 +151,7 @@ export default function Balancete() {
         const parentBal = finalBalances.get(acc.parent_id)
         const myBal = finalBalances.get(acc.id)
         if (parentBal && myBal) {
+          parentBal.saldoInicial += myBal.saldoInicial
           parentBal.debits += myBal.debits
           parentBal.credits += myBal.credits
         }
@@ -122,14 +162,12 @@ export default function Balancete() {
       const bal = finalBalances.get(acc.id)!
       const totalDebitos = bal.debits
       const totalCreditos = bal.credits
+      const saldoInicial = bal.saldoInicial
 
-      let finalBalance = totalDebitos - totalCreditos
-      const isCreditNormal =
-        acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
+      let balanceValue = totalDebitos - totalCreditos
 
-      if (isCreditNormal) {
-        finalBalance = totalCreditos - totalDebitos
-      }
+      let dcFinal = balanceValue > 0 ? 'D' : balanceValue < 0 ? 'C' : ''
+      let finalBalance = Math.abs(balanceValue)
 
       return {
         ...acc,
@@ -137,41 +175,33 @@ export default function Balancete() {
         codigo: acc.code,
         conta: acc.name,
         tipo: acc.is_group ? 'S' : 'A',
-        saldoInicial: 0,
-        dcInicial: '',
+        saldoInicial: Math.abs(saldoInicial),
+        dcInicial: saldoInicial > 0 ? 'D' : saldoInicial < 0 ? 'C' : '',
         totalDebitos,
         totalCreditos,
-        saldoFinal: Math.abs(finalBalance),
-        dcFinal:
-          finalBalance === 0
-            ? ''
-            : isCreditNormal
-              ? finalBalance > 0
-                ? 'C'
-                : 'D'
-              : finalBalance > 0
-                ? 'D'
-                : 'C',
+        saldoFinal: finalBalance,
+        dcFinal,
         categoria: acc.type,
       }
     })
 
-    return finalRows.sort((a, b) => a.codigo.localeCompare(b.codigo))
+    const sortedData = finalRows.sort((a, b) => a.codigo.localeCompare(b.codigo))
+    const pMap = new Map(sortedData.map((d) => [d.id, d.parent_id]))
+
+    return { processedData: sortedData, parentMap: pMap }
   }, [accounts, items])
 
   const filteredData = useMemo(() => {
-    const parentMap = new Map(processedData.map((d) => [d.id, d.parent_id]))
-
     return processedData.filter((row) => {
       const matchesSearch =
-        row.conta.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        row.codigo.toLowerCase().includes(searchTerm.toLowerCase())
+        row.conta.toLowerCase().includes(deferredSearchTerm.toLowerCase()) ||
+        row.codigo.toLowerCase().includes(deferredSearchTerm.toLowerCase())
       const matchesCategory =
-        category === 'all' || row.categoria.toLowerCase() === category.toLowerCase()
-      const matchesNivel = row.nivel <= parseInt(maxNivel || '20', 10)
+        deferredCategory === 'all' || row.categoria.toLowerCase() === deferredCategory.toLowerCase()
+      const matchesNivel = row.nivel <= parseInt(deferredMaxNivel || '20', 10)
 
       let isVisible = true
-      if (!matchesSearch && searchTerm === '') {
+      if (!matchesSearch && deferredSearchTerm === '') {
         let curr = row.parent_id
         while (curr) {
           if (expandedGroups[curr] === false) {
@@ -184,7 +214,14 @@ export default function Balancete() {
 
       return matchesSearch && matchesCategory && matchesNivel && isVisible
     })
-  }, [processedData, searchTerm, category, maxNivel, expandedGroups])
+  }, [
+    processedData,
+    parentMap,
+    deferredSearchTerm,
+    deferredCategory,
+    deferredMaxNivel,
+    expandedGroups,
+  ])
 
   const getRowStyle = (nivel: number, tipo: string) => {
     if (nivel === 1) return 'bg-primary/10 text-primary font-bold hover:bg-primary/20'
@@ -193,6 +230,16 @@ export default function Balancete() {
     if (tipo === 'S') return 'font-medium'
     return ''
   }
+
+  const startIndex = MathMax(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endIndex = MathMin(
+    filteredData.length - 1,
+    Math.floor((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN,
+  )
+
+  const visibleRows = filteredData.slice(startIndex, endIndex + 1)
+  const topSpacerHeight = startIndex * ROW_HEIGHT
+  const bottomSpacerHeight = MathMax(0, (filteredData.length - 1 - endIndex) * ROW_HEIGHT)
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
@@ -260,9 +307,13 @@ export default function Balancete() {
         </div>
       </div>
 
-      <div className="rounded-md border bg-card flex-1 overflow-auto">
-        <Table className="relative min-w-[1000px]">
-          <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="rounded-md border bg-card flex-1 overflow-auto relative"
+      >
+        <Table className="relative min-w-[1000px] w-full">
+          <TableHeader className="sticky top-0 bg-background z-20 shadow-sm border-b">
             <TableRow>
               <TableHead className="w-16">Nível</TableHead>
               <TableHead className="w-32">Código</TableHead>
@@ -293,60 +344,84 @@ export default function Balancete() {
                 </TableCell>
               </TableRow>
             ) : (
-              filteredData.map((row, idx) => (
-                <TableRow
-                  key={`${row.codigo}-${idx}`}
-                  className={cn(
-                    'cursor-pointer transition-colors py-1 h-10 hover:bg-muted/80',
-                    getRowStyle(row.nivel, row.tipo),
-                  )}
-                  onClick={() =>
-                    row.tipo === 'A'
-                      ? navigate(`/projects/${projectId}/accounts/${row.id}/ledger`)
-                      : toggleGroup(row.id, { stopPropagation: () => {} } as any)
-                  }
-                >
-                  <TableCell className="py-2">{row.nivel}</TableCell>
-                  <TableCell className="py-2 font-mono text-xs">{row.codigo}</TableCell>
-                  <TableCell className="py-2 truncate max-w-[300px]" title={row.conta}>
-                    <div
-                      className="flex items-center gap-1"
-                      style={{ paddingLeft: `${(row.nivel - 1) * 12}px` }}
+              <>
+                {topSpacerHeight > 0 && (
+                  <tr style={{ height: topSpacerHeight }}>
+                    <td colSpan={10} className="p-0 border-0" />
+                  </tr>
+                )}
+                {visibleRows.map((row) => (
+                  <TableRow
+                    key={row.id}
+                    className={cn(
+                      'cursor-pointer transition-colors hover:bg-muted/80',
+                      getRowStyle(row.nivel, row.tipo),
+                    )}
+                    style={{ height: ROW_HEIGHT }}
+                    onClick={(e) =>
+                      row.tipo === 'A'
+                        ? navigate(`/projects/${projectId}/accounts/${row.id}/ledger`)
+                        : toggleGroup(row.id, e)
+                    }
+                  >
+                    <TableCell className="h-[40px] py-0 align-middle">{row.nivel}</TableCell>
+                    <TableCell className="h-[40px] py-0 align-middle font-mono text-xs">
+                      {row.codigo}
+                    </TableCell>
+                    <TableCell
+                      className="h-[40px] py-0 align-middle truncate max-w-[300px]"
+                      title={row.conta}
                     >
-                      {row.tipo === 'S' ? (
-                        <div
-                          onClick={(e) => toggleGroup(row.id, e)}
-                          className="p-0.5 hover:bg-muted rounded cursor-pointer"
-                        >
-                          {expandedGroups[row.id] ? (
-                            <ChevronDown className="h-4 w-4" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4" />
-                          )}
-                        </div>
-                      ) : (
-                        <div className="w-5" />
-                      )}
-                      <span>{row.conta}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="py-2 text-center">{row.tipo}</TableCell>
-                  <TableCell className="py-2 text-right tabular-nums">
-                    {formatNum(row.saldoInicial)}
-                  </TableCell>
-                  <TableCell className="py-2 text-center">{row.dcInicial}</TableCell>
-                  <TableCell className="py-2 text-right tabular-nums">
-                    {formatNum(row.totalDebitos)}
-                  </TableCell>
-                  <TableCell className="py-2 text-right tabular-nums">
-                    {formatNum(row.totalCreditos)}
-                  </TableCell>
-                  <TableCell className="py-2 text-right tabular-nums">
-                    {formatNum(row.saldoFinal)}
-                  </TableCell>
-                  <TableCell className="py-2 text-center">{row.dcFinal}</TableCell>
-                </TableRow>
-              ))
+                      <div
+                        className="flex items-center gap-1"
+                        style={{ paddingLeft: `${(row.nivel - 1) * 12}px` }}
+                      >
+                        {row.tipo === 'S' ? (
+                          <div
+                            onClick={(e) => toggleGroup(row.id, e)}
+                            className="p-0.5 hover:bg-muted rounded cursor-pointer"
+                          >
+                            {expandedGroups[row.id] ? (
+                              <ChevronDown className="h-4 w-4 shrink-0" />
+                            ) : (
+                              <ChevronRight className="h-4 w-4 shrink-0" />
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-5 shrink-0" />
+                        )}
+                        <span className="truncate">{row.conta}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="h-[40px] py-0 align-middle text-center">
+                      {row.tipo}
+                    </TableCell>
+                    <TableCell className="h-[40px] py-0 align-middle text-right tabular-nums">
+                      {formatNum(row.saldoInicial)}
+                    </TableCell>
+                    <TableCell className="h-[40px] py-0 align-middle text-center">
+                      {row.dcInicial}
+                    </TableCell>
+                    <TableCell className="h-[40px] py-0 align-middle text-right tabular-nums">
+                      {formatNum(row.totalDebitos)}
+                    </TableCell>
+                    <TableCell className="h-[40px] py-0 align-middle text-right tabular-nums">
+                      {formatNum(row.totalCreditos)}
+                    </TableCell>
+                    <TableCell className="h-[40px] py-0 align-middle text-right tabular-nums">
+                      {formatNum(row.saldoFinal)}
+                    </TableCell>
+                    <TableCell className="h-[40px] py-0 align-middle text-center">
+                      {row.dcFinal}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {bottomSpacerHeight > 0 && (
+                  <tr style={{ height: bottomSpacerHeight }}>
+                    <td colSpan={10} className="p-0 border-0" />
+                  </tr>
+                )}
+              </>
             )}
           </TableBody>
         </Table>

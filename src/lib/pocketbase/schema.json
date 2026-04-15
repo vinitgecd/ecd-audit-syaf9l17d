@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-04-15T14:20:34.887Z",
+  "generatedAt": "2026-04-15T14:53:25.825Z",
   "collections": [
     {
       "name": "users",
@@ -364,7 +364,8 @@
       ],
       "indexes": [
         "CREATE INDEX idx_accounts_project ON accounts (project_id)",
-        "CREATE INDEX idx_accounts_code ON accounts (code)"
+        "CREATE INDEX idx_accounts_code ON accounts (code)",
+        "CREATE INDEX `idx_accounts_parent_id` ON `accounts` (parent_id)"
       ]
     },
     {
@@ -478,7 +479,8 @@
       ],
       "indexes": [
         "CREATE INDEX idx_entry_items_entry ON entry_items (entry_id)",
-        "CREATE INDEX idx_entry_items_account ON entry_items (account_id)"
+        "CREATE INDEX idx_entry_items_account ON entry_items (account_id)",
+        "CREATE INDEX `idx_entry_items_acc_type` ON `entry_items` (account_id, type)"
       ]
     }
   ]
