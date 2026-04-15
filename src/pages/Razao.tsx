@@ -52,7 +52,7 @@ export default function Razao() {
 
     Promise.all([
       getAccount(accountId),
-      getAccountEntries(accountId),
+      getAccountEntries(accountId, projectId),
       getAuditCommentsByProject(projectId),
     ])
       .then(async ([acc, mainEntries, auditCommentsList]) => {
@@ -337,7 +337,14 @@ export default function Razao() {
             <ArrowLeft className="h-4 w-4 mr-2" />
             Voltar
           </Button>
-          <h2 className="text-xl font-bold text-foreground">Razão Analítico</h2>
+          <div className="flex flex-col">
+            <h2 className="text-xl font-bold text-foreground">Razão Analítico</h2>
+            {account && (
+              <span className="text-sm text-muted-foreground font-medium">
+                {account.code} - {account.name}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
@@ -451,17 +458,26 @@ export default function Razao() {
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center">
+                <TableCell colSpan={8} className="h-48 text-center">
                   <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                    <span>Carregando razão...</span>
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <span className="font-medium">Carregando razão analítico...</span>
                   </div>
                 </TableCell>
               </TableRow>
-            ) : filteredData.length === 0 && !startDate ? (
+            ) : entries.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
-                  Nenhum lançamento encontrado para o período ou critérios selecionados.
+                <TableCell colSpan={8} className="h-48 text-center">
+                  <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
+                    <FileText className="h-8 w-8 opacity-50" />
+                    <p className="font-medium text-base text-foreground">
+                      Nenhum lançamento encontrado
+                    </p>
+                    <p className="text-sm">Não há dados de razão para esta conta.</p>
+                    <p className="text-xs opacity-75 mt-1">
+                      Verifique se o arquivo ECD contém movimentos para esta conta.
+                    </p>
+                  </div>
                 </TableCell>
               </TableRow>
             ) : (
@@ -485,10 +501,18 @@ export default function Razao() {
                     <TableCell></TableCell>
                   </TableRow>
                 )}
-                {filteredData.length === 0 && startDate ? (
+                {filteredData.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                      Nenhum lançamento encontrado para os filtros selecionados.
+                    <TableCell colSpan={8} className="h-48 text-center">
+                      <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
+                        <Search className="h-8 w-8 opacity-50" />
+                        <p className="font-medium text-base text-foreground">
+                          Nenhum resultado para os filtros
+                        </p>
+                        <p className="text-sm">
+                          Tente limpar ou alterar as datas e o termo de busca.
+                        </p>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (

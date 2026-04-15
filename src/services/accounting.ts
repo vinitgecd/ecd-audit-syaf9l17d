@@ -66,9 +66,9 @@ export const getEntryItems = (projectId: string) =>
     expand: 'entry_id',
   })
 
-export const getAccountEntries = (accountId: string) =>
+export const getAccountEntries = (accountId: string, projectId: string) =>
   pb.collection('entry_items').getFullList<EntryItem>({
-    filter: `account_id = "${accountId}"`,
+    filter: `account_id = "${accountId}" && entry_id.project_id = "${projectId}"`,
     expand: 'entry_id',
     sort: 'entry_id.date,created',
   })
