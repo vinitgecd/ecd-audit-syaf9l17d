@@ -248,6 +248,8 @@ export default function Analysis() {
             </CardContent>
           </Card>
         </div>
+        </>
+      )}
       </div>
     )
   }
