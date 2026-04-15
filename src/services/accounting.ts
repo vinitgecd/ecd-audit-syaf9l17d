@@ -1,4 +1,4 @@
-import pb from '@/lib/pocketbase/client'
+import { pb } from '@/lib/pocketbase/client'
 
 export interface AccountBalance extends Account {
   total_debits: number
