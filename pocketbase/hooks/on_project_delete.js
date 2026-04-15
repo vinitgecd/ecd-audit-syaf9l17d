@@ -1,7 +1,7 @@
-onRecordDelete((e) => {
+onRecordAfterDeleteSuccess((e) => {
   const projectId = e.record.id
 
-  if ($app.hasTable('journal_entries') && $app.hasTable('entry_items')) {
+  try {
     $app
       .db()
       .newQuery(
@@ -9,27 +9,38 @@ onRecordDelete((e) => {
       )
       .bind({ projectId: projectId })
       .execute()
+  } catch (err) {
+    console.log('Error deleting entry_items: ' + err)
+  }
+
+  try {
     $app
       .db()
       .newQuery('DELETE FROM journal_entries WHERE project_id = {:projectId}')
       .bind({ projectId: projectId })
       .execute()
+  } catch (err) {
+    console.log('Error deleting journal_entries: ' + err)
   }
 
-  if ($app.hasTable('accounts')) {
+  try {
     $app
       .db()
       .newQuery('DELETE FROM accounts WHERE project_id = {:projectId}')
       .bind({ projectId: projectId })
       .execute()
+  } catch (err) {
+    console.log('Error deleting accounts: ' + err)
   }
 
-  if ($app.hasTable('audit_comments')) {
+  try {
     $app
       .db()
       .newQuery('DELETE FROM audit_comments WHERE project_id = {:projectId}')
       .bind({ projectId: projectId })
       .execute()
+  } catch (err) {
+    console.log('Error deleting audit_comments: ' + err)
   }
 
   return e.next()
