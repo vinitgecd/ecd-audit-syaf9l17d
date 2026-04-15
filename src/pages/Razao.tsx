@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDatabase } from '@/contexts/DatabaseContext'
 import { ArrowLeft, Search, FileSpreadsheet, FileText, Loader2 } from 'lucide-react'
@@ -46,70 +46,122 @@ export default function Razao() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
+  const perPage = 50
+  const [pageLoading, setPageLoading] = useState(false)
+
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(searchQuery), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
+
   const { isReady } = useDatabase()
 
-  const fetchLedgerData = useCallback(async () => {
-    if (!isReady) return
-    if (!accountId || !projectId) {
-      setError('Parâmetros de rota inválidos.')
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    setError(null)
+  const tableContainerRef = useRef<HTMLDivElement>(null)
+  const [containerHeight, setContainerHeight] = useState(600)
+  const [scrollTop, setScrollTop] = useState(0)
 
-    try {
-      const acc = await getAccount(accountId).catch((err) => {
-        console.error('Error fetching account:', err)
-        throw new Error('Conta não encontrada ou erro ao carregar a conta.')
-      })
+  useEffect(() => {
+    if (!tableContainerRef.current) return
+    const observer = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        setContainerHeight(entry.contentRect.height)
+      }
+    })
+    observer.observe(tableContainerRef.current)
+    return () => observer.disconnect()
+  }, [])
 
-      const [mainEntries, auditCommentsList] = await Promise.all([
-        getAccountEntries(accountId, projectId).catch((err) => {
-          console.error('Error fetching entries:', err)
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setScrollTop(e.currentTarget.scrollTop)
+  }, [])
+
+  const fetchLedgerData = useCallback(
+    async (pageNumber: number = 1) => {
+      if (!isReady) return
+      if (!accountId || !projectId) {
+        setError('Parâmetros de rota inválidos.')
+        setLoading(false)
+        return
+      }
+
+      if (pageNumber === 1) setLoading(true)
+      else setPageLoading(true)
+
+      setError(null)
+
+      try {
+        const acc = await getAccount(accountId).catch((err) => {
+          console.error('Error fetching account:', err)
+          throw new Error('Conta não encontrada ou erro ao carregar a conta.')
+        })
+
+        const [paginatedRes, auditCommentsList] = await Promise.all([
+          getAccountEntriesPaginated(accountId, projectId, pageNumber, perPage, {
+            search: debouncedSearch,
+            startDate,
+            endDate,
+          }).catch((err) => {
+            console.error('Error fetching entries:', err)
+            return { items: [] as EntryItem[], totalPages: 1, totalItems: 0 }
+          }),
+          getAuditCommentsByProject(projectId).catch((err) => {
+            console.error('Error fetching comments:', err)
+            return [] as AuditComment[]
+          }),
+        ])
+
+        const mainEntries = paginatedRes.items
+        setAccount(acc)
+        setEntries(mainEntries)
+        setCurrentPage(pageNumber)
+        setTotalPages(paginatedRes.totalPages)
+        setTotalItems(paginatedRes.totalItems)
+
+        const cMap: Record<string, AuditComment> = {}
+        auditCommentsList.forEach((c) => {
+          cMap[c.entry_reference] = c
+        })
+        setComments(cMap)
+
+        const entryIds = Array.from(new Set(mainEntries.map((e) => e.entry_id)))
+        const allItems = await getEntryItemsByEntryIds(entryIds).catch((err) => {
+          console.error('Error fetching counterpart entries:', err)
           return [] as EntryItem[]
-        }),
-        getAuditCommentsByProject(projectId).catch((err) => {
-          console.error('Error fetching comments:', err)
-          return [] as AuditComment[]
-        }),
-      ])
+        })
 
-      setAccount(acc)
-      setEntries(mainEntries)
+        const cpMap: Record<string, EntryItem[]> = {}
+        allItems.forEach((item) => {
+          if (!cpMap[item.entry_id]) cpMap[item.entry_id] = []
+          cpMap[item.entry_id].push(item)
+        })
+        setCounterparts(cpMap)
 
-      const cMap: Record<string, AuditComment> = {}
-      auditCommentsList.forEach((c) => {
-        cMap[c.entry_reference] = c
-      })
-      setComments(cMap)
+        if (pageNumber === 1) setLoading(false)
+        else setPageLoading(false)
 
-      const entryIds = Array.from(new Set(mainEntries.map((e) => e.entry_id)))
-      const allItems = await getEntryItemsByEntryIds(entryIds).catch((err) => {
-        console.error('Error fetching counterpart entries:', err)
-        return [] as EntryItem[]
-      })
-
-      const cpMap: Record<string, EntryItem[]> = {}
-      allItems.forEach((item) => {
-        if (!cpMap[item.entry_id]) cpMap[item.entry_id] = []
-        cpMap[item.entry_id].push(item)
-      })
-      setCounterparts(cpMap)
-
-      setLoading(false)
-    } catch (err: any) {
-      console.error('Razão Analítico Error:', err)
-      setError(
-        err.message || 'Falha ao carregar os dados do razão analítico. Por favor, tente novamente.',
-      )
-      setLoading(false)
-    }
-  }, [accountId, projectId, isReady])
+        if (tableContainerRef.current) {
+          tableContainerRef.current.scrollTop = 0
+        }
+      } catch (err: any) {
+        console.error('Razão Analítico Error:', err)
+        setError(
+          err.message ||
+            'Falha ao carregar os dados do razão analítico. Por favor, tente novamente.',
+        )
+        if (pageNumber === 1) setLoading(false)
+        else setPageLoading(false)
+      }
+    },
+    [accountId, projectId, isReady, debouncedSearch, startDate, endDate, perPage],
+  )
 
   useEffect(() => {
     if (!isReady) return
@@ -118,7 +170,7 @@ export default function Razao() {
       navigate(projectId ? `/projects/${projectId}/balancete` : '/projects', { replace: true })
       return
     }
-    fetchLedgerData()
+    fetchLedgerData(1)
   }, [accountId, projectId, navigate, isReady, fetchLedgerData])
 
   useRealtime(
@@ -216,6 +268,19 @@ export default function Razao() {
         r.counterpartStr.toLowerCase().includes(q),
     )
   }, [ledgerData.periodData, searchQuery])
+
+  const ROW_HEIGHT = 40
+  const OVERSCAN = 15
+
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endIndex = Math.min(
+    filteredData.length,
+    Math.ceil((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN,
+  )
+
+  const visibleRows = filteredData.slice(startIndex, endIndex)
+  const topSpacerHeight = startIndex * ROW_HEIGHT
+  const bottomSpacerHeight = (filteredData.length - endIndex) * ROW_HEIGHT
 
   const getPriorDc = () => {
     if (ledgerData.priorBalance === 0) return ''
@@ -412,27 +477,30 @@ export default function Razao() {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
           </div>
-          <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportCSV}
-              title="Exportar para Excel/CSV"
-              className="h-9"
-            >
-              <FileSpreadsheet className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">CSV</span>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleExportPDF}
-              title="Exportar para PDF"
-              className="h-9"
-            >
-              <FileText className="h-4 w-4 sm:mr-2" />
-              <span className="hidden sm:inline">PDF</span>
-            </Button>
+          <div className="flex flex-col items-end gap-1 shrink-0 self-end sm:self-auto">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportCSV}
+                title="Exportar para Excel/CSV"
+                className="h-9"
+              >
+                <FileSpreadsheet className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">CSV</span>
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleExportPDF}
+                title="Exportar para PDF"
+                className="h-9"
+              >
+                <FileText className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">PDF</span>
+              </Button>
+            </div>
+            <span className="text-xs text-muted-foreground">Exporta pagina atual</span>
           </div>
         </div>
       </div>
@@ -479,7 +547,14 @@ export default function Razao() {
         </CardContent>
       </Card>
 
-      <div className="rounded-md border bg-card flex-1 overflow-auto shadow-sm">
+      <div
+        className={cn(
+          'rounded-md border bg-card flex-1 overflow-auto shadow-sm',
+          pageLoading && 'opacity-50',
+        )}
+        ref={tableContainerRef}
+        onScroll={handleScroll}
+      >
         <Table className="relative min-w-[1200px]">
           <TableHeader className="sticky top-0 bg-background z-10 shadow-sm border-b">
             <TableRow>
@@ -531,7 +606,7 @@ export default function Razao() {
             ) : (
               <>
                 {startDate && (
-                  <TableRow className="bg-muted/10">
+                  <TableRow className="bg-muted/10" style={{ height: ROW_HEIGHT }}>
                     <TableCell className="py-2 text-sm text-muted-foreground">
                       {format(parseISO(startDate), 'dd/MM/yyyy')}
                     </TableCell>
@@ -564,62 +639,104 @@ export default function Razao() {
                     </TableCell>
                   </TableRow>
                 ) : (
-                  filteredData.map((row) => {
-                    const hasComment = !!comments[row.id]
-                    const comment = comments[row.id]
-
-                    return (
-                      <TableRow
-                        key={row.id}
-                        className={cn(
-                          'transition-colors py-1 h-10',
-                          hasComment && 'bg-blue-50/30 dark:bg-blue-900/10',
-                        )}
-                      >
-                        <TableCell className="py-2 text-sm">{row.dateStr}</TableCell>
-                        <TableCell
-                          className="py-2 text-sm truncate max-w-[200px]"
-                          title={row.description}
-                        >
-                          {row.description}
-                        </TableCell>
-                        <TableCell className="py-2 text-sm font-mono text-muted-foreground">
-                          {row.reference}
-                        </TableCell>
-                        <TableCell
-                          className="py-2 text-sm text-muted-foreground truncate max-w-[200px]"
-                          title={row.counterpartStr}
-                        >
-                          {row.counterpartStr}
-                        </TableCell>
-                        <TableCell className="py-2 text-sm text-right tabular-nums text-blue-600 font-medium">
-                          {row.type === 'debit' ? formatNum(row.value) : ''}
-                        </TableCell>
-                        <TableCell className="py-2 text-sm text-right tabular-nums text-red-600 font-medium">
-                          {row.type === 'credit' ? formatNum(row.value) : ''}
-                        </TableCell>
-                        <TableCell className="py-2 text-sm text-right tabular-nums font-semibold">
-                          {formatNum(row.runningBalance)}
-                          <span className="text-muted-foreground text-xs ml-1 font-normal">
-                            {row.dc}
-                          </span>
-                        </TableCell>
-                        <TableCell className="py-2">
-                          <InlineAuditNote
-                            projectId={projectId!}
-                            userId={user?.id!}
-                            entryReference={row.id}
-                            comment={comment || null}
-                          />
-                        </TableCell>
+                  <>
+                    {topSpacerHeight > 0 && (
+                      <TableRow style={{ height: topSpacerHeight, border: 'none' }}>
+                        <TableCell colSpan={8} className="p-0 border-none" />
                       </TableRow>
-                    )
-                  })
+                    )}
+                    {visibleRows.map((row) => {
+                      const hasComment = !!comments[row.id]
+                      const comment = comments[row.id]
+
+                      return (
+                        <TableRow
+                          key={row.id}
+                          className={cn(
+                            'transition-colors py-1',
+                            hasComment && 'bg-blue-50/30 dark:bg-blue-900/10',
+                          )}
+                          style={{ height: ROW_HEIGHT }}
+                        >
+                          <TableCell className="py-2 text-sm">{row.dateStr}</TableCell>
+                          <TableCell
+                            className="py-2 text-sm truncate max-w-[200px]"
+                            title={row.description}
+                          >
+                            {row.description}
+                          </TableCell>
+                          <TableCell className="py-2 text-sm font-mono text-muted-foreground">
+                            {row.reference}
+                          </TableCell>
+                          <TableCell
+                            className="py-2 text-sm text-muted-foreground truncate max-w-[200px]"
+                            title={row.counterpartStr}
+                          >
+                            {row.counterpartStr}
+                          </TableCell>
+                          <TableCell className="py-2 text-sm text-right tabular-nums text-blue-600 font-medium">
+                            {row.type === 'debit' ? formatNum(row.value) : ''}
+                          </TableCell>
+                          <TableCell className="py-2 text-sm text-right tabular-nums text-red-600 font-medium">
+                            {row.type === 'credit' ? formatNum(row.value) : ''}
+                          </TableCell>
+                          <TableCell className="py-2 text-sm text-right tabular-nums font-semibold">
+                            {formatNum(row.runningBalance)}
+                            <span className="text-muted-foreground text-xs ml-1 font-normal">
+                              {row.dc}
+                            </span>
+                          </TableCell>
+                          <TableCell className="py-2">
+                            <InlineAuditNote
+                              projectId={projectId!}
+                              userId={user?.id!}
+                              entryReference={row.id}
+                              comment={comment || null}
+                            />
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                    {bottomSpacerHeight > 0 && (
+                      <TableRow style={{ height: bottomSpacerHeight, border: 'none' }}>
+                        <TableCell colSpan={8} className="p-0 border-none" />
+                      </TableRow>
+                    )}
+                  </>
                 )}
               </>
             )}
           </TableBody>
         </Table>
+      </div>
+
+      <div className="flex items-center justify-between pt-1 pb-2 shrink-0 relative">
+        <div className="text-sm text-muted-foreground">
+          Mostrando {currentPage} de {totalPages} paginas ({totalItems} lancamentos)
+        </div>
+        {pageLoading && (
+          <div className="flex items-center justify-center absolute left-1/2 -translate-x-1/2">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
+        )}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchLedgerData(currentPage - 1)}
+            disabled={currentPage === 1 || pageLoading}
+          >
+            Anterior
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fetchLedgerData(currentPage + 1)}
+            disabled={currentPage === totalPages || pageLoading || totalPages === 0}
+          >
+            Proxima
+          </Button>
+        </div>
       </div>
     </div>
   )
