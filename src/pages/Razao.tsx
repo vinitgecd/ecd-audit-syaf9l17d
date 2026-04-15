@@ -1,5 +1,6 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useDatabase } from '@/contexts/DatabaseContext'
 import { ArrowLeft, Search, FileSpreadsheet, FileText, Loader2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
@@ -49,7 +50,10 @@ export default function Razao() {
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
-  const fetchLedgerData = async () => {
+  const { isReady } = useDatabase()
+
+  const fetchLedgerData = useCallback(async () => {
+    if (!isReady) return
     if (!accountId || !projectId) {
       setError('Parâmetros de rota inválidos.')
       setLoading(false)
@@ -105,16 +109,17 @@ export default function Razao() {
       )
       setLoading(false)
     }
-  }
+  }, [accountId, projectId, isReady])
 
   useEffect(() => {
+    if (!isReady) return
     if (!accountId || !projectId) {
       toast.error('Conta ou projeto não especificado.')
       navigate(projectId ? `/projects/${projectId}/balancete` : '/projects', { replace: true })
       return
     }
     fetchLedgerData()
-  }, [accountId, projectId, navigate])
+  }, [accountId, projectId, navigate, isReady, fetchLedgerData])
 
   useRealtime(
     'audit_comments',
@@ -503,7 +508,7 @@ export default function Razao() {
                 <TableCell colSpan={8} className="h-48 text-center">
                   <div className="flex flex-col items-center justify-center text-destructive gap-4">
                     <p className="font-medium">{error}</p>
-                    <Button variant="outline" onClick={fetchLedgerData}>
+                    <Button variant="outline" onClick={() => fetchLedgerData()}>
                       Tentar Novamente
                     </Button>
                   </div>

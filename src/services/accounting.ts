@@ -1,13 +1,5 @@
-import defaultPb from '@/lib/pocketbase/client'
+import pb from '@/lib/pocketbase/client'
 import type PocketBase from 'pocketbase'
-
-const getPb = (): PocketBase => {
-  const client = (defaultPb as any)?.default || defaultPb
-  if (!client || typeof client.collection !== 'function') {
-    throw new Error('Database client not initialized')
-  }
-  return client as PocketBase
-}
 
 export interface AccountBalance extends Account {
   total_debits: number
@@ -53,92 +45,173 @@ export interface EntryItem {
   }
 }
 
-export const createAccount = async (data: Partial<Account>) =>
-  getPb().collection('accounts').create<Account>(data)
+const getClient = (): PocketBase => {
+  if (!pb || typeof pb.collection !== 'function') {
+    throw new Error('Database client not initialized or collection method missing')
+  }
+  return pb
+}
 
-export const createJournalEntry = async (data: Partial<JournalEntry>) =>
-  getPb().collection('journal_entries').create<JournalEntry>(data)
+const safeCollection = (collectionName: string) => {
+  return getClient().collection(collectionName)
+}
 
-export const createEntryItem = async (data: Partial<EntryItem>) =>
-  getPb().collection('entry_items').create<EntryItem>(data)
+export const createAccount = async (data: Partial<Account>) => {
+  try {
+    return await safeCollection('accounts').create<Account>(data)
+  } catch (error) {
+    console.error('Error in createAccount:', error)
+    throw error
+  }
+}
 
-export const getAccountingProjects = async () =>
-  getPb().collection('projects').getFullList({ sort: '-created' })
+export const createJournalEntry = async (data: Partial<JournalEntry>) => {
+  try {
+    return await safeCollection('journal_entries').create<JournalEntry>(data)
+  } catch (error) {
+    console.error('Error in createJournalEntry:', error)
+    throw error
+  }
+}
 
-export const getAccount = async (accountId: string) =>
-  getPb().collection('accounts').getOne<Account>(accountId)
+export const createEntryItem = async (data: Partial<EntryItem>) => {
+  try {
+    return await safeCollection('entry_items').create<EntryItem>(data)
+  } catch (error) {
+    console.error('Error in createEntryItem:', error)
+    throw error
+  }
+}
 
-export const getAccounts = async (projectId: string) =>
-  getPb()
-    .collection('accounts')
-    .getFullList<Account>({
+export const getAccountingProjects = async () => {
+  try {
+    return await safeCollection('projects').getFullList({ sort: '-created' })
+  } catch (error) {
+    console.error('Error in getAccountingProjects:', error)
+    throw error
+  }
+}
+
+export const getAccount = async (accountId: string) => {
+  try {
+    if (!accountId) throw new Error('Account ID is required')
+    return await safeCollection('accounts').getOne<Account>(accountId)
+  } catch (error) {
+    console.error('Error in getAccount:', error)
+    throw error
+  }
+}
+
+export const getAccounts = async (projectId: string) => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    return await safeCollection('accounts').getFullList<Account>({
       filter: `project_id = "${projectId}"`,
       sort: 'code',
     })
+  } catch (error) {
+    console.error('Error in getAccounts:', error)
+    throw error
+  }
+}
 
 export const getAccountBalances = async (projectId: string, level?: number, search?: string) => {
-  let filter = `project_id = "${projectId}"`
-  if (level) filter += ` && level <= ${level}`
-  if (search) {
-    const s = search.replace(/"/g, '\\"')
-    filter += ` && (code ~ "${s}" || name ~ "${s}")`
-  }
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    let filter = `project_id = "${projectId}"`
+    if (level) filter += ` && level <= ${level}`
+    if (search) {
+      const s = search.replace(/"/g, '\\"')
+      filter += ` && (code ~ "${s}" || name ~ "${s}")`
+    }
 
-  const result = await getPb()
-    .collection('account_balances')
-    .getFullList<AccountBalance>({
+    return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter,
       sort: 'code',
       $cancelKey: `balancete_${projectId}_${level}_${search}`,
     })
-
-  return result
+  } catch (error) {
+    console.error('Error in getAccountBalances:', error)
+    throw error
+  }
 }
 
-export const resetProjectData = async (projectId: string) =>
-  getPb().send(`/backend/v1/projects/${projectId}/reset`, { method: 'POST' })
+export const resetProjectData = async (projectId: string) => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    return await getClient().send(`/backend/v1/projects/${projectId}/reset`, { method: 'POST' })
+  } catch (error) {
+    console.error('Error in resetProjectData:', error)
+    throw error
+  }
+}
 
-export const getEntryItems = async (projectId: string) =>
-  getPb()
-    .collection('entry_items')
-    .getFullList<EntryItem>({
+export const getEntryItems = async (projectId: string) => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    return await safeCollection('entry_items').getFullList<EntryItem>({
       filter: `entry_id.project_id = "${projectId}"`,
       expand: 'entry_id',
     })
+  } catch (error) {
+    console.error('Error in getEntryItems:', error)
+    throw error
+  }
+}
 
-export const getAccountEntries = async (accountId: string, projectId: string) =>
-  getPb()
-    .collection('entry_items')
-    .getFullList<EntryItem>({
+export const getAccountEntries = async (accountId: string, projectId: string) => {
+  try {
+    if (!accountId || !projectId) throw new Error('Account ID and Project ID are required')
+    return await safeCollection('entry_items').getFullList<EntryItem>({
       filter: `account_id = "${accountId}" && entry_id.project_id = "${projectId}"`,
       expand: 'entry_id',
       sort: 'entry_id.date,created',
       fields:
         'id,entry_id,account_id,type,value,created,updated,expand.entry_id.id,expand.entry_id.date,expand.entry_id.description,expand.entry_id.reference',
     })
+  } catch (error) {
+    console.error('Error in getAccountEntries:', error)
+    throw error
+  }
+}
 
-export const importEcdData = async (projectId: string, data: { accounts: any[]; entries: any[] }) =>
-  getPb().send(`/backend/v1/projects/${projectId}/import/ecd`, {
-    method: 'POST',
-    body: JSON.stringify(data),
-    headers: { 'Content-Type': 'application/json' },
-  })
+export const importEcdData = async (
+  projectId: string,
+  data: { accounts: any[]; entries: any[] },
+) => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    return await getClient().send(`/backend/v1/projects/${projectId}/import/ecd`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+      headers: { 'Content-Type': 'application/json' },
+    })
+  } catch (error) {
+    console.error('Error in importEcdData:', error)
+    throw error
+  }
+}
 
 export const getEntryItemsByEntryIds = async (entryIds: string[]) => {
-  if (entryIds.length === 0) return []
-  const chunkSize = 50
-  const results: EntryItem[] = []
-  const client = getPb()
-  for (let i = 0; i < entryIds.length; i += chunkSize) {
-    const chunk = entryIds.slice(i, i + chunkSize)
-    const filter = chunk.map((id) => `entry_id="${id}"`).join('||')
-    const items = await client.collection('entry_items').getFullList<EntryItem>({
-      filter: `(${filter})`,
-      expand: 'account_id',
-      fields:
-        'id,entry_id,account_id,type,value,expand.account_id.id,expand.account_id.code,expand.account_id.name',
-    })
-    results.push(...items)
+  try {
+    if (!entryIds || entryIds.length === 0) return []
+    const chunkSize = 50
+    const results: EntryItem[] = []
+    const client = getClient()
+    for (let i = 0; i < entryIds.length; i += chunkSize) {
+      const chunk = entryIds.slice(i, i + chunkSize)
+      const filter = chunk.map((id) => `entry_id="${id}"`).join('||')
+      const items = await client.collection('entry_items').getFullList<EntryItem>({
+        filter: `(${filter})`,
+        expand: 'account_id',
+        fields:
+          'id,entry_id,account_id,type,value,expand.account_id.id,expand.account_id.code,expand.account_id.name',
+      })
+      results.push(...items)
+    }
+    return results
+  } catch (error) {
+    console.error('Error in getEntryItemsByEntryIds:', error)
+    throw error
   }
-  return results
 }

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { useDatabase } from '@/contexts/DatabaseContext'
 import {
   FileText,
   Table as TableIcon,
@@ -59,6 +60,8 @@ export default function Balancete() {
   const [maxNivel, setMaxNivel] = useState('4')
   const [debouncedNivel, setDebouncedNivel] = useState('4')
 
+  const { isReady, error: dbError } = useDatabase()
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm)
@@ -93,10 +96,10 @@ export default function Balancete() {
   }, [])
 
   useEffect(() => {
-    if (projectId) {
+    if (projectId && isReady) {
       loadBalancete(projectId, parseInt(debouncedNivel || '4', 10), debouncedSearch)
     }
-  }, [projectId, debouncedNivel, debouncedSearch, loadBalancete])
+  }, [projectId, debouncedNivel, debouncedSearch, loadBalancete, isReady])
 
   const toggleGroup = useCallback(
     (id: string, e: React.MouseEvent) => {

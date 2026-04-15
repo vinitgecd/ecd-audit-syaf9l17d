@@ -5,6 +5,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import Layout from './components/Layout'
 import { AuthProvider } from './hooks/use-auth'
 import { AccountingProvider } from './stores/useAccountingStore'
+import { DatabaseProvider } from './contexts/DatabaseContext'
 
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
@@ -21,31 +22,33 @@ import NotFound from './pages/NotFound'
 
 const App = () => (
   <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: false }}>
-    <AuthProvider>
-      <AccountingProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
-            <Route element={<Layout />}>
-              <Route path="/" element={<Navigate to="/dashboard" replace />} />
-              <Route path="/dashboard" element={<Index />} />
-              <Route path="/projects" element={<Projects />} />
-              <Route path="/projects/:projectId/import" element={<Import />} />
-              <Route path="/projects/:projectId/analysis" element={<Analysis />} />
-              <Route path="/projects/:projectId/balancete" element={<Balancete />} />
-              <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
-              <Route path="/projects/:projectId/documents" element={<Documents />} />
-              <Route path="/projects/:projectId/pending" element={<Pending />} />
-              <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
-            </Route>
-            <Route path="*" element={<NotFound />} />
-          </Routes>
-        </TooltipProvider>
-      </AccountingProvider>
-    </AuthProvider>
+    <DatabaseProvider>
+      <AuthProvider>
+        <AccountingProvider>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
+              <Route element={<Layout />}>
+                <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                <Route path="/dashboard" element={<Index />} />
+                <Route path="/projects" element={<Projects />} />
+                <Route path="/projects/:projectId/import" element={<Import />} />
+                <Route path="/projects/:projectId/analysis" element={<Analysis />} />
+                <Route path="/projects/:projectId/balancete" element={<Balancete />} />
+                <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
+                <Route path="/projects/:projectId/documents" element={<Documents />} />
+                <Route path="/projects/:projectId/pending" element={<Pending />} />
+                <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
+              </Route>
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </TooltipProvider>
+        </AccountingProvider>
+      </AuthProvider>
+    </DatabaseProvider>
   </BrowserRouter>
 )
 
