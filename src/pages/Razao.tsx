@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Search, FileSpreadsheet, FileText } from 'lucide-react'
+import { ArrowLeft, Search, FileSpreadsheet, FileText, Loader2 } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
 import { Button } from '@/components/ui/button'
@@ -50,15 +50,29 @@ export default function Razao() {
   const [endDate, setEndDate] = useState('')
 
   const fetchLedgerData = async () => {
-    if (!accountId || !projectId) return
+    if (!accountId || !projectId) {
+      setError('Parâmetros de rota inválidos.')
+      setLoading(false)
+      return
+    }
     setLoading(true)
     setError(null)
 
     try {
-      const [acc, mainEntries, auditCommentsList] = await Promise.all([
-        getAccount(accountId),
-        getAccountEntries(accountId, projectId),
-        getAuditCommentsByProject(projectId),
+      const acc = await getAccount(accountId).catch((err) => {
+        console.error('Error fetching account:', err)
+        throw new Error('Conta não encontrada ou erro ao carregar a conta.')
+      })
+
+      const [mainEntries, auditCommentsList] = await Promise.all([
+        getAccountEntries(accountId, projectId).catch((err) => {
+          console.error('Error fetching entries:', err)
+          return [] as EntryItem[]
+        }),
+        getAuditCommentsByProject(projectId).catch((err) => {
+          console.error('Error fetching comments:', err)
+          return [] as AuditComment[]
+        }),
       ])
 
       setAccount(acc)
@@ -71,7 +85,10 @@ export default function Razao() {
       setComments(cMap)
 
       const entryIds = Array.from(new Set(mainEntries.map((e) => e.entry_id)))
-      const allItems = await getEntryItemsByEntryIds(entryIds)
+      const allItems = await getEntryItemsByEntryIds(entryIds).catch((err) => {
+        console.error('Error fetching counterpart entries:', err)
+        return [] as EntryItem[]
+      })
 
       const cpMap: Record<string, EntryItem[]> = {}
       allItems.forEach((item) => {
@@ -81,9 +98,11 @@ export default function Razao() {
       setCounterparts(cpMap)
 
       setLoading(false)
-    } catch (err) {
-      console.error(err)
-      setError('Falha ao carregar os dados do razão analítico. Por favor, tente novamente.')
+    } catch (err: any) {
+      console.error('Razão Analítico Error:', err)
+      setError(
+        err.message || 'Falha ao carregar os dados do razão analítico. Por favor, tente novamente.',
+      )
       setLoading(false)
     }
   }
@@ -471,34 +490,14 @@ export default function Razao() {
           </TableHeader>
           <TableBody>
             {loading ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                <TableRow key={`skeleton-${i}`}>
-                  <TableCell>
-                    <Skeleton className="h-4 w-20" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-full max-w-[180px]" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-24" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-full max-w-[180px]" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-16 ml-auto" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-16 ml-auto" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-20 ml-auto" />
-                  </TableCell>
-                  <TableCell>
-                    <Skeleton className="h-4 w-8" />
-                  </TableCell>
-                </TableRow>
-              ))
+              <TableRow>
+                <TableCell colSpan={8} className="h-48 text-center">
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                    <p className="text-muted-foreground font-medium">Carregando transações...</p>
+                  </div>
+                </TableCell>
+              </TableRow>
             ) : error ? (
               <TableRow>
                 <TableCell colSpan={8} className="h-48 text-center">
