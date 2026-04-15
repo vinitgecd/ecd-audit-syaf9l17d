@@ -215,3 +215,47 @@ export const getEntryItemsByEntryIds = async (entryIds: string[]) => {
     throw error
   }
 }
+
+export const getRootAccountBalances = async (projectId: string) => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    return await safeCollection('account_balances').getFullList<AccountBalance>({
+      filter: `project_id = "${projectId}" && level = 1`,
+      sort: 'code',
+    })
+  } catch (error) {
+    console.error('Error in getRootAccountBalances:', error)
+    throw error
+  }
+}
+
+export const getChildAccountBalances = async (projectId: string, parentId: string) => {
+  try {
+    if (!projectId || !parentId) throw new Error('Project ID and Parent ID are required')
+    return await safeCollection('account_balances').getFullList<AccountBalance>({
+      filter: `project_id = "${projectId}" && parent_id = "${parentId}"`,
+      sort: 'code',
+    })
+  } catch (error) {
+    console.error('Error in getChildAccountBalances:', error)
+    throw error
+  }
+}
+
+export const getAccountBalancesByIds = async (projectId: string, search: string) => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    let filter = `project_id = "${projectId}"`
+    if (search) {
+      const s = search.replace(/"/g, '\\"')
+      filter += ` && (code ~ "${s}" || name ~ "${s}")`
+    }
+    return await safeCollection('account_balances').getList<AccountBalance>(1, 200, {
+      filter,
+      sort: 'code',
+    })
+  } catch (error) {
+    console.error('Error in getAccountBalancesByIds:', error)
+    throw error
+  }
+}
