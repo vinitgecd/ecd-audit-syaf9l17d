@@ -4,6 +4,7 @@ import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Layout from './components/Layout'
 import { AuthProvider } from './hooks/use-auth'
+import { AccountingProvider } from './stores/useAccountingStore'
 
 import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
@@ -20,26 +21,28 @@ import NotFound from './pages/NotFound'
 const App = () => (
   <BrowserRouter future={{ v7_startTransition: false, v7_relativeSplatPath: false }}>
     <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          <Route element={<Layout />}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Index />} />
-            <Route path="/projects" element={<Projects />} />
-            <Route path="/projects/:projectId/import" element={<Import />} />
-            <Route path="/projects/:projectId/analysis" element={<Analysis />} />
-            <Route path="/projects/:projectId/balancete" element={<Balancete />} />
-            <Route path="/projects/:projectId/accounts/:accountId/ledger" element={<Razao />} />
-            <Route path="/projects/:projectId/documents" element={<Documents />} />
-            <Route path="/projects/:projectId/pending" element={<Pending />} />
-          </Route>
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </TooltipProvider>
+      <AccountingProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/register" element={<Register />} />
+            <Route element={<Layout />}>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Index />} />
+              <Route path="/projects" element={<Projects />} />
+              <Route path="/projects/:projectId/import" element={<Import />} />
+              <Route path="/projects/:projectId/analysis" element={<Analysis />} />
+              <Route path="/projects/:projectId/balancete" element={<Balancete />} />
+              <Route path="/projects/:projectId/accounts/:accountId/ledger" element={<Razao />} />
+              <Route path="/projects/:projectId/documents" element={<Documents />} />
+              <Route path="/projects/:projectId/pending" element={<Pending />} />
+            </Route>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </TooltipProvider>
+      </AccountingProvider>
     </AuthProvider>
   </BrowserRouter>
 )

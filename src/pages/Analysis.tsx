@@ -16,10 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AlertCircle, Loader2 } from 'lucide-react'
-import { getAccounts, getEntryItems, Account, EntryItem } from '@/services/accounting'
+import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
 import { getAuditCommentsByProject } from '@/services/audit_comments'
 import { useRealtime } from '@/hooks/use-realtime'
+import useAccountingStore from '@/stores/useAccountingStore'
+import { Button } from '@/components/ui/button'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const chartConfig = {
   receitas: { label: 'Receitas', color: 'hsl(var(--chart-1))' },
@@ -31,43 +33,47 @@ const chartConfig = {
 export default function Analysis() {
   const { projectId } = useParams()
 
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [items, setItems] = useState<EntryItem[]>([])
-  const [pendingCount, setPendingCount] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const {
+    accounts,
+    items,
+    loading: storeLoading,
+    error: storeError,
+    loadData,
+  } = useAccountingStore()
 
-  const loadData = async (id: string) => {
+  const [pendingCount, setPendingCount] = useState(0)
+  const [localLoading, setLocalLoading] = useState(true)
+
+  const loadComments = async (id: string) => {
     try {
-      const [accs, entryItems, comments] = await Promise.all([
-        getAccounts(id),
-        getEntryItems(id),
-        getAuditCommentsByProject(id),
-      ])
-      setAccounts(accs)
-      setItems(entryItems)
+      const comments = await getAuditCommentsByProject(id)
       setPendingCount(
         comments.filter((c) => c.status === 'pending' || c.status === 'rejected').length,
       )
     } catch (e) {
       console.error(e)
     } finally {
-      setLoading(false)
+      setLocalLoading(false)
     }
   }
 
   useEffect(() => {
-    if (projectId) loadData(projectId)
-  }, [projectId])
+    if (projectId) {
+      loadData(projectId)
+      loadComments(projectId)
+    }
+  }, [projectId, loadData])
 
-  useRealtime('accounts', () => {
-    if (projectId) loadData(projectId)
-  })
-  useRealtime('entry_items', () => {
-    if (projectId) loadData(projectId)
-  })
-  useRealtime('audit_comments', () => {
-    if (projectId) loadData(projectId)
-  })
+  useRealtime(
+    'audit_comments',
+    () => {
+      if (projectId) loadComments(projectId)
+    },
+    !!projectId,
+  )
+
+  const loading = storeLoading || localLoading
+  const error = storeError
 
   const metrics = useMemo(() => {
     let ativoCirculante = 0
@@ -156,11 +162,51 @@ export default function Analysis() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-[50vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <span className="ml-2 font-medium text-muted-foreground">
-          Carregando análise contábil...
-        </span>
+      <div className="space-y-6 animate-pulse">
+        <div className="flex justify-between items-center">
+          <div>
+            <Skeleton className="h-8 w-48 mb-2" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <Skeleton className="h-10 w-[180px]" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i}>
+              <CardHeader className="pb-2">
+                <Skeleton className="h-4 w-24" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-8 w-20 mb-1" />
+                <Skeleton className="h-3 w-32" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card>
+            <CardContent className="h-[300px] flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </CardContent>
+          </Card>
+          <Card>
+            <CardContent className="h-[300px] flex items-center justify-center">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
+        <p className="text-destructive font-medium">Erro ao carregar dados contábeis.</p>
+        <Button variant="outline" onClick={() => projectId && loadData(projectId, true)}>
+          <RefreshCw className="mr-2 h-4 w-4" />
+          Tentar Novamente
+        </Button>
       </div>
     )
   }

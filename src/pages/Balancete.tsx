@@ -6,9 +6,9 @@ import {
   FileDown,
   Search,
   Filter,
-  Loader2,
   ChevronRight,
   ChevronDown,
+  RefreshCw,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -28,8 +28,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { getAccounts, getEntryItems, Account, EntryItem } from '@/services/accounting'
-import { useRealtime } from '@/hooks/use-realtime'
+import { Skeleton } from '@/components/ui/skeleton'
+import useAccountingStore from '@/stores/useAccountingStore'
 
 const formatNum = (val: number) =>
   new Intl.NumberFormat('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(val)
@@ -37,6 +37,8 @@ const formatNum = (val: number) =>
 export default function Balancete() {
   const navigate = useNavigate()
   const { projectId } = useParams()
+
+  const { accounts, items, loading, error, loadData } = useAccountingStore()
 
   const [searchTerm, setSearchTerm] = useState('')
   const deferredSearchTerm = useDeferredValue(searchTerm)
@@ -47,9 +49,6 @@ export default function Balancete() {
   const [maxNivel, setMaxNivel] = useState('20')
   const deferredMaxNivel = useDeferredValue(maxNivel)
 
-  const [accounts, setAccounts] = useState<Account[]>([])
-  const [items, setItems] = useState<EntryItem[]>([])
-  const [loading, setLoading] = useState(true)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
 
   // Virtualization constants and state
@@ -77,42 +76,26 @@ export default function Balancete() {
     setScrollTop(e.currentTarget.scrollTop)
   }, [])
 
-  const loadData = async (id: string) => {
-    setLoading(true)
-    try {
-      const [accs, entryItems] = await Promise.all([getAccounts(id), getEntryItems(id)])
-      setAccounts(accs)
-      setItems(entryItems)
-
-      const initialExpanded: Record<string, boolean> = {}
-      accs.forEach((a) => {
-        if (a.is_group || (a.level && a.level <= 3)) {
-          initialExpanded[a.id] = true
-        }
-      })
-      setExpandedGroups(initialExpanded)
-    } catch (e) {
-      console.error(e)
-    } finally {
-      setLoading(false)
-    }
-  }
-
   useEffect(() => {
     if (projectId) {
       loadData(projectId)
     }
-  }, [projectId])
+  }, [projectId, loadData])
 
-  useRealtime('accounts', () => {
-    if (projectId) loadData(projectId)
-  })
-  useRealtime('entry_items', () => {
-    if (projectId) loadData(projectId)
-  })
-  useRealtime('journal_entries', () => {
-    if (projectId) loadData(projectId)
-  })
+  useEffect(() => {
+    if (accounts.length > 0) {
+      setExpandedGroups((prev) => {
+        if (Object.keys(prev).length > 0) return prev
+        const initial: Record<string, boolean> = {}
+        accounts.forEach((a) => {
+          if (a.is_group || (a.level && a.level <= 3)) {
+            initial[a.id] = true
+          }
+        })
+        return initial
+      })
+    }
+  }, [accounts])
 
   const toggleGroup = useCallback((id: string, e: React.MouseEvent) => {
     e.stopPropagation()
@@ -165,7 +148,6 @@ export default function Balancete() {
       const saldoInicial = bal.saldoInicial
 
       let balanceValue = totalDebitos - totalCreditos
-
       let dcFinal = balanceValue > 0 ? 'D' : balanceValue < 0 ? 'C' : ''
       let finalBalance = Math.abs(balanceValue)
 
@@ -329,11 +311,56 @@ export default function Balancete() {
           </TableHeader>
           <TableBody>
             {loading ? (
+              <>
+                {Array.from({ length: 15 }).map((_, i) => (
+                  <TableRow key={i}>
+                    <TableCell>
+                      <Skeleton className="h-4 w-4" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-24" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-full max-w-[200px]" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-4 mx-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20 ml-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-4 mx-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20 ml-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20 ml-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-20 ml-auto" />
+                    </TableCell>
+                    <TableCell>
+                      <Skeleton className="h-4 w-4 mx-auto" />
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </>
+            ) : error ? (
               <TableRow>
                 <TableCell colSpan={10} className="h-32 text-center">
-                  <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
-                    <Loader2 className="h-6 w-6 animate-spin" />
-                    <span>Carregando dados financeiros...</span>
+                  <div className="flex flex-col items-center justify-center text-muted-foreground gap-4">
+                    <p className="text-destructive font-medium">
+                      Erro ao carregar dados financeiros.
+                    </p>
+                    <Button
+                      variant="outline"
+                      onClick={() => projectId && loadData(projectId, true)}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Tentar Novamente
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
