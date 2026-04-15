@@ -16,6 +16,7 @@ import Balancete from './pages/Balancete'
 import Documents from './pages/Documents'
 import Razao from './pages/Razao'
 import Pending from './pages/Pending'
+import ProjectSettings from './pages/ProjectSettings'
 import NotFound from './pages/NotFound'
 
 const App = () => (
@@ -38,6 +39,7 @@ const App = () => (
               <Route path="/projects/:projectId/accounts/:accountId/ledger" element={<Razao />} />
               <Route path="/projects/:projectId/documents" element={<Documents />} />
               <Route path="/projects/:projectId/pending" element={<Pending />} />
+              <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
             </Route>
             <Route path="*" element={<NotFound />} />
           </Routes>

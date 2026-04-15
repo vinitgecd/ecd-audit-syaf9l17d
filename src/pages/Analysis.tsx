@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   ChartContainer,
@@ -16,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
+import { AlertCircle, Loader2, RefreshCw, Trash2 } from 'lucide-react'
 import { getAuditCommentsByProject } from '@/services/audit_comments'
 import { useRealtime } from '@/hooks/use-realtime'
 import useAccountingStore from '@/stores/useAccountingStore'
@@ -84,19 +84,54 @@ export default function Analysis() {
     balanceData: [],
   }
 
+  const navigate = useNavigate()
   const isLoadingData = loading
   const [showSlowWarning, setShowSlowWarning] = useState(false)
+  const [hasTimeout, setHasTimeout] = useState(false)
 
   useEffect(() => {
     let timer: NodeJS.Timeout
+    let timeoutTimer: NodeJS.Timeout
+
     if (isLoadingData) {
       setShowSlowWarning(false)
+      setHasTimeout(false)
       timer = setTimeout(() => setShowSlowWarning(true), 2000)
+      timeoutTimer = setTimeout(() => setHasTimeout(true), 15000)
     } else {
       setShowSlowWarning(false)
+      setHasTimeout(false)
     }
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      clearTimeout(timeoutTimer)
+    }
   }, [isLoadingData])
+
+  if (hasTimeout) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[50vh] gap-4 text-center">
+        <AlertCircle className="h-10 w-10 text-destructive" />
+        <p className="text-lg font-medium text-foreground">
+          O carregamento da análise está demorando muito.
+        </p>
+        <p className="text-sm text-muted-foreground max-w-md">
+          Projetos grandes podem levar mais tempo para serem computados. Tente novamente ou vá para
+          as configurações se quiser limpar os dados.
+        </p>
+        <div className="flex gap-3 mt-4">
+          <Button variant="outline" onClick={() => projectId && loadData(projectId, true)}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Tentar Novamente
+          </Button>
+          <Button variant="destructive" onClick={() => navigate(`/projects/${projectId}/settings`)}>
+            <Trash2 className="mr-2 h-4 w-4" />
+            Resetar Projeto
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   if (isLoadingData) {
     return (

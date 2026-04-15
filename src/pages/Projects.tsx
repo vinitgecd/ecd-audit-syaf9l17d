@@ -178,8 +178,12 @@ export default function Projects() {
     }
   }
 
+  const [isDeleting, setIsDeleting] = useState(false)
+
   const handleDelete = async () => {
     if (!projectToDelete) return
+    setIsDeleting(true)
+    toast({ title: 'Aguarde', description: 'Excluindo projeto e dados vinculados...' })
     try {
       await deleteProject(projectToDelete)
       setProjectToDelete(null)
@@ -190,6 +194,8 @@ export default function Projects() {
         title: 'Erro',
         description: 'Não foi possível remover o projeto.',
       })
+    } finally {
+      setIsDeleting(false)
     }
   }
 
@@ -496,12 +502,13 @@ export default function Projects() {
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
               <AlertDialogAction
                 onClick={handleDelete}
+                disabled={isDeleting}
                 className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               >
-                Excluir
+                {isDeleting ? 'Excluindo...' : 'Excluir'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
