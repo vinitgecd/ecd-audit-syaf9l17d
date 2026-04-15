@@ -24,6 +24,7 @@ import { useRealtime } from '@/hooks/use-realtime'
 import {
   getAccount,
   getAccountEntries,
+  getAccountEntriesPaginated,
   getEntryItemsByEntryIds,
   Account,
   EntryItem,
@@ -110,7 +111,7 @@ export default function Razao() {
             endDate,
           }).catch((err) => {
             console.error('Error fetching entries:', err)
-            return { items: [] as EntryItem[], totalPages: 1, totalItems: 0 }
+            return { items: [] as EntryItem[], totalPages: 1, totalItems: 0, page: 1 }
           }),
           getAuditCommentsByProject(projectId).catch((err) => {
             console.error('Error fetching comments:', err)
@@ -121,7 +122,7 @@ export default function Razao() {
         const mainEntries = paginatedRes.items
         setAccount(acc)
         setEntries(mainEntries)
-        setCurrentPage(pageNumber)
+        setCurrentPage(paginatedRes.page || pageNumber)
         setTotalPages(paginatedRes.totalPages)
         setTotalItems(paginatedRes.totalItems)
 

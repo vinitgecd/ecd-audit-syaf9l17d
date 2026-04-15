@@ -293,6 +293,7 @@ export const getAccountEntriesPaginated = async (
       filter,
       expand: 'entry_id',
       sort: 'entry_id.date,created',
+      $cancelKey: `razao_${accountId}_${page}_${options?.search || ''}`,
       fields:
         'id,entry_id,account_id,type,value,created,updated,expand.entry_id.id,expand.entry_id.date,expand.entry_id.description,expand.entry_id.reference',
     })
@@ -306,6 +307,7 @@ export const getAccountRunningBalance = async (
   accountId: string,
   projectId: string,
   beforeDate?: string,
+  beforeId?: string,
 ) => {
   try {
     if (!accountId || !projectId) throw new Error('Account ID and Project ID are required')
@@ -316,15 +318,11 @@ export const getAccountRunningBalance = async (
       filter += ` && entry_id.date < "${beforeDate}"`
     }
 
-    return await safeCollection('entry_items').getFullList<{
-      id: string
-      type: 'debit' | 'credit'
-      value: number
-      entry_id: string
-    }>({
+    return await safeCollection('entry_items').getFullList<EntryItem>({
       filter,
       sort: 'entry_id.date,created',
       fields: 'id,type,value,entry_id',
+      expand: 'entry_id',
     })
   } catch (error) {
     console.error('Error in getAccountRunningBalance:', error)
