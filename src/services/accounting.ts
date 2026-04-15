@@ -259,3 +259,93 @@ export const getAccountBalancesByIds = async (projectId: string, search: string)
     throw error
   }
 }
+
+export const getAccountEntriesPaginated = async (
+  accountId: string,
+  projectId: string,
+  page: number = 1,
+  perPage: number = 50,
+  options?: {
+    search?: string
+    startDate?: string
+    endDate?: string
+  },
+) => {
+  try {
+    if (!accountId || !projectId) throw new Error('Account ID and Project ID are required')
+
+    let filter = `account_id = "${accountId}" && entry_id.project_id = "${projectId}"`
+
+    if (options?.search) {
+      const s = options.search.replace(/"/g, '\\"')
+      filter += ` && (entry_id.description ~ "${s}" || entry_id.reference ~ "${s}")`
+    }
+
+    if (options?.startDate) {
+      filter += ` && entry_id.date >= "${options.startDate}"`
+    }
+
+    if (options?.endDate) {
+      filter += ` && entry_id.date <= "${options.endDate}"`
+    }
+
+    return await safeCollection('entry_items').getList<EntryItem>(page, perPage, {
+      filter,
+      expand: 'entry_id',
+      sort: 'entry_id.date,created',
+      fields:
+        'id,entry_id,account_id,type,value,created,updated,expand.entry_id.id,expand.entry_id.date,expand.entry_id.description,expand.entry_id.reference',
+    })
+  } catch (error) {
+    console.error('Error in getAccountEntriesPaginated:', error)
+    throw error
+  }
+}
+
+export const getAccountRunningBalance = async (
+  accountId: string,
+  projectId: string,
+  beforeDate?: string,
+) => {
+  try {
+    if (!accountId || !projectId) throw new Error('Account ID and Project ID are required')
+
+    let filter = `account_id = "${accountId}" && entry_id.project_id = "${projectId}"`
+
+    if (beforeDate) {
+      filter += ` && entry_id.date < "${beforeDate}"`
+    }
+
+    return await safeCollection('entry_items').getFullList<{
+      id: string
+      type: 'debit' | 'credit'
+      value: number
+      entry_id: string
+    }>({
+      filter,
+      sort: 'entry_id.date,created',
+      fields: 'id,type,value,entry_id',
+    })
+  } catch (error) {
+    console.error('Error in getAccountRunningBalance:', error)
+    throw error
+  }
+}
+
+export const getAccountEntriesTotalCount = async (accountId: string, projectId: string) => {
+  try {
+    if (!accountId || !projectId) throw new Error('Account ID and Project ID are required')
+
+    const filter = `account_id = "${accountId}" && entry_id.project_id = "${projectId}"`
+
+    const result = await safeCollection('entry_items').getList(1, 1, {
+      filter,
+      fields: 'id',
+    })
+
+    return result.totalItems
+  } catch (error) {
+    console.error('Error in getAccountEntriesTotalCount:', error)
+    return 0
+  }
+}
