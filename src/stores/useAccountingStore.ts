@@ -6,6 +6,9 @@ import {
   getEntryItems,
   AccountBalance,
   getAccountBalances,
+  getRootAccountBalances,
+  getChildAccountBalances,
+  getAccountBalancesByIds,
   resetProjectData,
 } from '@/services/accounting'
 import { useRealtime } from '@/hooks/use-realtime'
@@ -46,12 +49,14 @@ interface AccountingState {
   processedAnalysis: ProcessedAnalysis | null
   expandedGroups: Record<string, boolean>
   setExpandedGroups: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  loadedChildren: Record<string, boolean>
   loading: boolean
   isProcessing: boolean
   hasLoaded: boolean
   error: Error | null
   loadData: (projectId: string, force?: boolean) => Promise<void>
   loadBalancete: (projectId: string, level: number, search: string) => Promise<void>
+  loadChildren: (projectId: string, parentId: string) => Promise<void>
   resetProject: (projectId: string) => Promise<void>
 }
 
@@ -96,6 +101,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   const [processedBalancete, setProcessedBalancete] = useState<ProcessedBalancete | null>(null)
   const [processedAnalysis, setProcessedAnalysis] = useState<ProcessedAnalysis | null>(null)
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
+  const [loadedChildren, setLoadedChildren] = useState<Record<string, boolean>>({})
 
   const [loading, setLoading] = useState(false)
   const [isProcessing, setIsProcessing] = useState(false)
@@ -131,7 +137,13 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
     })
 
     try {
-      const fetchPromise = getAccountBalances(id, level, search)
+      let fetchPromise
+      if (search) {
+        fetchPromise = getAccountBalancesByIds(id, search).then((res) => res.items)
+      } else {
+        fetchPromise = getRootAccountBalances(id)
+      }
+
       const balances = (await Promise.race([fetchPromise, timeoutPromise])) as AccountBalance[]
 
       if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current)
@@ -143,17 +155,8 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         try {
           const balancete = processBalancete(balances)
           setProcessedBalancete(balancete)
-
-          setExpandedGroups((prev) => {
-            if (Object.keys(prev).length > 0 && !search) return prev
-            const initial: Record<string, boolean> = {}
-            balances.forEach((a) => {
-              if (a.is_group || (a.level && a.level <= 3)) {
-                initial[a.id] = true
-              }
-            })
-            return initial
-          })
+          setExpandedGroups({})
+          setLoadedChildren({})
           setHasLoaded(true)
         } catch (err) {
           console.error('Processing error', err)
@@ -171,6 +174,39 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
       setIsProcessing(false)
     }
   }, [])
+
+  const loadChildren = useCallback(
+    async (projectId: string, parentId: string) => {
+      if (loadedChildren[parentId]) return
+
+      try {
+        const children = await getChildAccountBalances(projectId, parentId)
+
+        if (children.length > 0) {
+          const processedChildren = processBalancete(children)
+
+          setProcessedBalancete((prev) => {
+            if (!prev) return prev
+            const newData = [...prev.data, ...processedChildren.data]
+            newData.sort((a, b) => a.codigo.localeCompare(b.codigo))
+
+            const newMap = new Map(prev.parentMap)
+            processedChildren.parentMap.forEach((val, key) => {
+              newMap.set(key, val)
+            })
+
+            return { data: newData, parentMap: newMap }
+          })
+        }
+
+        setLoadedChildren((prev) => ({ ...prev, [parentId]: true }))
+      } catch (error) {
+        console.error('Erro ao carregar subcontas', error)
+        toast.error('Erro ao carregar subcontas')
+      }
+    },
+    [loadedChildren],
+  )
 
   const loadData = useCallback(
     async (id: string, force = false) => {
@@ -297,12 +333,14 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         processedAnalysis,
         expandedGroups,
         setExpandedGroups,
+        loadedChildren,
         loading,
         isProcessing,
         hasLoaded,
         error,
         loadData,
         loadBalancete,
+        loadChildren,
         resetProject,
       },
     },
