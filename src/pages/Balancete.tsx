@@ -6,8 +6,6 @@ import {
   FileDown,
   Search,
   Filter,
-  Settings2,
-  X,
   Loader2,
   ChevronRight,
   ChevronDown,
@@ -30,13 +28,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import {
-  getAccountingProjects,
-  getAccounts,
-  getEntryItems,
-  Account,
-  EntryItem,
-} from '@/services/accounting'
+import { getAccounts, getEntryItems, Account, EntryItem } from '@/services/accounting'
 import { useRealtime } from '@/hooks/use-realtime'
 
 const formatNum = (val: number) =>
@@ -63,10 +55,7 @@ export default function Balancete() {
 
       const initialExpanded: Record<string, boolean> = {}
       accs.forEach((a) => {
-        if (
-          a.is_group ||
-          (!a.is_group && accs.some((child) => child.code.startsWith(a.code) && child.id !== a.id))
-        ) {
+        if (a.is_group || a.level! <= 3) {
           initialExpanded[a.id] = true
         }
       })
@@ -100,76 +89,54 @@ export default function Balancete() {
   }, [])
 
   const processedData = useMemo(() => {
-    const analyticalBalances = accounts.map((acc) => {
-      const accountItems = items.filter((i) => i.account_id === acc.id)
-      let periodDebits = 0
-      let periodCredits = 0
+    const analyticalBalances = new Map<string, { debits: number; credits: number }>()
+    accounts.forEach((acc) => analyticalBalances.set(acc.id, { debits: 0, credits: 0 }))
 
-      accountItems.forEach((item) => {
-        if (item.type === 'debit') periodDebits += item.value
-        if (item.type === 'credit') periodCredits += item.value
-      })
-
-      return {
-        id: acc.id,
-        directDebits: periodDebits,
-        directCredits: periodCredits,
+    items.forEach((item) => {
+      const accBal = analyticalBalances.get(item.account_id)
+      if (accBal) {
+        if (item.type === 'debit') accBal.debits += item.value
+        if (item.type === 'credit') accBal.credits += item.value
       }
     })
 
-    const getDescendantBalances = (acc: Account) => {
-      const descendants = accounts.filter(
-        (r) =>
-          r.parent_id === acc.id ||
-          (r.code !== acc.code && r.code.startsWith(acc.code + '.')) ||
-          (r.code !== acc.code && r.code.startsWith(acc.code) && !acc.code.includes('.')),
-      )
+    const accountsByLevel = [...accounts].sort((a, b) => (b.level || 0) - (a.level || 0))
+    const finalBalances = new Map<string, { debits: number; credits: number }>()
 
-      let totalDebitos = analyticalBalances.find((b) => b.id === acc.id)?.directDebits || 0
-      let totalCreditos = analyticalBalances.find((b) => b.id === acc.id)?.directCredits || 0
+    accounts.forEach((acc) => {
+      finalBalances.set(acc.id, { ...analyticalBalances.get(acc.id)! })
+    })
 
-      descendants.forEach((child) => {
-        const isChildAnalytical =
-          !child.is_group &&
-          !accounts.some(
-            (r) =>
-              r.parent_id === child.id ||
-              (r.code !== child.code && r.code.startsWith(child.code + '.')),
-          )
-        if (isChildAnalytical || !child.is_group) {
-          totalDebitos += analyticalBalances.find((b) => b.id === child.id)?.directDebits || 0
-          totalCreditos += analyticalBalances.find((b) => b.id === child.id)?.directCredits || 0
+    accountsByLevel.forEach((acc) => {
+      if (acc.parent_id) {
+        const parentBal = finalBalances.get(acc.parent_id)
+        const myBal = finalBalances.get(acc.id)
+        if (parentBal && myBal) {
+          parentBal.debits += myBal.debits
+          parentBal.credits += myBal.credits
         }
-      })
-
-      return { totalDebitos, totalCreditos }
-    }
+      }
+    })
 
     const finalRows = accounts.map((acc) => {
-      const { totalDebitos, totalCreditos } = acc.is_group
-        ? getDescendantBalances(acc)
-        : {
-            totalDebitos: analyticalBalances.find((b) => b.id === acc.id)?.directDebits || 0,
-            totalCreditos: analyticalBalances.find((b) => b.id === acc.id)?.directCredits || 0,
-          }
+      const bal = finalBalances.get(acc.id)!
+      const totalDebitos = bal.debits
+      const totalCreditos = bal.credits
 
       let finalBalance = totalDebitos - totalCreditos
-      const isCreditNormal = acc.nature
-        ? acc.nature === 'credit'
-        : acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
+      const isCreditNormal =
+        acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
 
       if (isCreditNormal) {
         finalBalance = totalCreditos - totalDebitos
       }
 
-      const isAnalytical = !acc.is_group && !accounts.some((r) => r.parent_id === acc.id)
-
       return {
         ...acc,
-        nivel: acc.level || acc.code.split('.').length,
+        nivel: acc.level || 1,
         codigo: acc.code,
         conta: acc.name,
-        tipo: isAnalytical ? 'A' : 'S',
+        tipo: acc.is_group ? 'S' : 'A',
         saldoInicial: 0,
         dcInicial: '',
         totalDebitos,
@@ -193,6 +160,8 @@ export default function Balancete() {
   }, [accounts, items])
 
   const filteredData = useMemo(() => {
+    const parentMap = new Map(processedData.map((d) => [d.id, d.parent_id]))
+
     return processedData.filter((row) => {
       const matchesSearch =
         row.conta.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -203,23 +172,13 @@ export default function Balancete() {
 
       let isVisible = true
       if (!matchesSearch && searchTerm === '') {
-        let currentParent = row.parent_id
-        while (currentParent && isVisible) {
-          if (expandedGroups[currentParent] === false) {
+        let curr = row.parent_id
+        while (curr) {
+          if (expandedGroups[curr] === false) {
             isVisible = false
+            break
           }
-          currentParent = processedData.find((p) => p.id === currentParent)?.parent_id
-        }
-
-        if (!row.parent_id) {
-          const parts = row.codigo.split('.')
-          for (let i = 1; i < parts.length; i++) {
-            const ancestorCode = parts.slice(0, i).join('.')
-            const ancestor = processedData.find((p) => p.codigo === ancestorCode)
-            if (ancestor && expandedGroups[ancestor.id] === false) {
-              isVisible = false
-            }
-          }
+          curr = parentMap.get(curr)
         }
       }
 

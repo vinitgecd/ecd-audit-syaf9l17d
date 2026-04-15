@@ -73,6 +73,13 @@ export const getAccountEntries = (accountId: string) =>
     sort: 'entry_id.date,created',
   })
 
+export const importEcdData = (projectId: string, data: { accounts: any[]; entries: any[] }) =>
+  pb.send(`/backend/v1/projects/${projectId}/import/ecd`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+    headers: { 'Content-Type': 'application/json' },
+  })
+
 export const getEntryItemsByEntryIds = async (entryIds: string[]) => {
   if (entryIds.length === 0) return []
   const chunkSize = 50

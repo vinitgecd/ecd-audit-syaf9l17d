@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
-import { createAccount, createJournalEntry, createEntryItem } from '@/services/accounting'
+import { importEcdData } from '@/services/accounting'
 import { UploadCloud, FileType2, Loader2 } from 'lucide-react'
 import { Progress } from '@/components/ui/progress'
 import { Button } from '@/components/ui/button'
@@ -69,148 +69,104 @@ export default function Import() {
       const processData = async () => {
         if (id === 'ecd' && projectId) {
           try {
+            updateTab(id, { progress: 10 })
+            const text = await state.file!.text()
             updateTab(id, { progress: 30 })
-            const accAtivo = await createAccount({
-              project_id: projectId,
-              code: '1',
-              name: 'Ativo',
-              type: 'asset',
-              is_group: true,
-              level: 1,
-              nature: '01',
-            })
-            const accAtivoCirc = await createAccount({
-              project_id: projectId,
-              code: '1.1',
-              name: 'Ativo Circulante',
-              type: 'asset',
-              is_group: true,
-              level: 2,
-              parent_id: accAtivo.id,
-              nature: '01',
-            })
-            const accDisponibilidades = await createAccount({
-              project_id: projectId,
-              code: '1.1.01',
-              name: 'Disponibilidades',
-              type: 'asset',
-              is_group: true,
-              level: 3,
-              parent_id: accAtivoCirc.id,
-              nature: '01',
-            })
-            const accCaixa = await createAccount({
-              project_id: projectId,
-              code: '1.1.01.01',
-              name: 'Caixa Geral',
-              type: 'asset',
-              is_group: false,
-              level: 4,
-              parent_id: accDisponibilidades.id,
-              nature: '01',
-            })
-            const accBanco = await createAccount({
-              project_id: projectId,
-              code: '1.1.01.02',
-              name: 'Bancos Conta Movimento',
-              type: 'asset',
-              is_group: false,
-              level: 4,
-              parent_id: accDisponibilidades.id,
-              nature: '01',
-            })
-            const accPassivo = await createAccount({
-              project_id: projectId,
-              code: '2',
-              name: 'Passivo',
-              type: 'liability',
-              is_group: true,
-              level: 1,
-              nature: '02',
-            })
-            const accFornecedores = await createAccount({
-              project_id: projectId,
-              code: '2.1.01.01',
-              name: 'Fornecedores',
-              type: 'liability',
-              is_group: false,
-              level: 4,
-              parent_id: accPassivo.id,
-              nature: '02',
-            })
-            const accReceita = await createAccount({
-              project_id: projectId,
-              code: '3.1.01.01',
-              name: 'Receita de Serviços',
-              type: 'revenue',
-              is_group: false,
-              level: 4,
-              nature: '03',
-            })
-            const accDespesa = await createAccount({
-              project_id: projectId,
-              code: '4.1.01.01',
-              name: 'Despesas Administrativas',
-              type: 'expense',
-              is_group: false,
-              level: 4,
-              nature: '04',
-            })
+
+            const lines = text.split(/\r?\n/)
+            const accounts = []
+            const entries = []
+            let currentEntry: any = null
+
+            for (const line of lines) {
+              if (!line.trim()) continue
+              const parts = line.split('|')
+
+              if (parts[1] === 'I050') {
+                const codNat = parts[3]
+                const indCta = parts[4]
+                const level = parseInt(parts[5], 10)
+                const codCta = parts[6]
+                const codCtaSup = parts[7]
+                const name = parts[8]
+
+                let type = 'asset'
+                if (codNat === '02') type = 'liability'
+                else if (codNat === '03') type = 'equity'
+                else if (codNat === '04') {
+                  type = codCta.startsWith('3') ? 'revenue' : 'expense'
+                } else if (codNat) {
+                  type = 'expense'
+                }
+
+                accounts.push({
+                  code: codCta,
+                  name: name,
+                  type: type,
+                  level: isNaN(level) ? 1 : level,
+                  nature: codNat,
+                  is_group: indCta === 'S',
+                  parent_code: codCtaSup,
+                })
+              } else if (parts[1] === 'I200') {
+                if (entries.length >= 500) continue
+                const numLcto = parts[2]
+                const dtLcto = parts[3]
+                let date = new Date().toISOString()
+                if (dtLcto && dtLcto.length === 8) {
+                  date = new Date(
+                    `${dtLcto.substring(4, 8)}-${dtLcto.substring(2, 4)}-${dtLcto.substring(0, 2)}`,
+                  ).toISOString()
+                }
+                currentEntry = {
+                  date,
+                  description: `Lançamento ${numLcto}`,
+                  reference: numLcto,
+                  items: [],
+                }
+                entries.push(currentEntry)
+              } else if (parts[1] === 'I250') {
+                if (currentEntry) {
+                  const codCta = parts[2]
+                  const valStr = parts[4]
+                  const indDc = parts[5]
+                  const hist = parts[8]
+
+                  if (hist) currentEntry.description = hist
+
+                  currentEntry.items.push({
+                    account_code: codCta,
+                    type: indDc === 'D' ? 'debit' : 'credit',
+                    value: parseFloat(valStr ? valStr.replace(',', '.') : '0'),
+                  })
+                }
+              }
+            }
+
+            if (accounts.length === 0) {
+              throw new Error('O arquivo não contém o bloco I050 (Plano de Contas).')
+            }
 
             updateTab(id, { progress: 60 })
 
-            const entry1 = await createJournalEntry({
-              project_id: projectId,
-              date: new Date().toISOString(),
-              description: 'Recebimento de cliente',
-              reference: 'NF-123',
-            })
-            await createEntryItem({
-              entry_id: entry1.id,
-              account_id: accBanco.id,
-              type: 'debit',
-              value: 5000,
-            })
-            await createEntryItem({
-              entry_id: entry1.id,
-              account_id: accReceita.id,
-              type: 'credit',
-              value: 5000,
-            })
-
-            updateTab(id, { progress: 80 })
-
-            const entry2 = await createJournalEntry({
-              project_id: projectId,
-              date: new Date().toISOString(),
-              description: 'Pagamento fornecedor',
-              reference: 'NF-456',
-            })
-            await createEntryItem({
-              entry_id: entry2.id,
-              account_id: accFornecedores.id,
-              type: 'debit',
-              value: 2000,
-            })
-            await createEntryItem({
-              entry_id: entry2.id,
-              account_id: accBanco.id,
-              type: 'credit',
-              value: 2000,
-            })
+            await importEcdData(projectId, { accounts, entries })
 
             updateTab(id, { progress: 100, status: 'validated' })
             toast({
               title: 'Sucesso',
-              description: `Arquivo ECD processado e dados gerados com sucesso.`,
+              description: `${accounts.length} contas contábeis importadas com sucesso.`,
             })
 
             setTimeout(() => {
               navigate(`/projects/${projectId}/balancete`)
-            }, 1000)
-          } catch (error) {
+            }, 1500)
+          } catch (error: any) {
             console.error(error)
-            toast({ variant: 'destructive', title: 'Erro', description: 'Falha ao processar ECD.' })
+            toast({
+              variant: 'destructive',
+              title: 'Erro na importação',
+              description: error.message || 'Falha ao processar ECD.',
+            })
             updateTab(id, { status: 'idle', progress: 0 })
           }
         } else {
