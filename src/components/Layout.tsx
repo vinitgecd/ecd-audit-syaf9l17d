@@ -41,7 +41,7 @@ export default function Layout() {
 
   if (!user) return <Navigate to="/login" replace />
 
-  const match = location.pathname.match(/\/projects\/([^\/]+)/)
+  const match = location.pathname.match(/\/projects\/([^/]+)/)
   const projectId = match ? match[1] : null
 
   const mainNavItems = [
@@ -49,13 +49,15 @@ export default function Layout() {
     { title: 'Projetos', url: '/projects', icon: Folder },
   ]
 
-  const projectNavItems = projectId ? [
-    { title: 'Importar', url: `/projects/${projectId}/import`, icon: Upload },
-    { title: 'Balancete', url: `/projects/${projectId}/balancete`, icon: BookOpen },
-    { title: 'Análise Contábil', url: `/projects/${projectId}/analysis`, icon: BarChart2 },
-    { title: 'Documentos Fiscais', url: `/projects/${projectId}/documents`, icon: FileText },
-    { title: 'Pendências', url: `/projects/${projectId}/pending`, icon: AlertCircle },
-  ] : []
+  const projectNavItems = projectId
+    ? [
+        { title: 'Importar', url: `/projects/${projectId}/import`, icon: Upload },
+        { title: 'Balancete', url: `/projects/${projectId}/balancete`, icon: BookOpen },
+        { title: 'Análise Contábil', url: `/projects/${projectId}/analysis`, icon: BarChart2 },
+        { title: 'Documentos Fiscais', url: `/projects/${projectId}/documents`, icon: FileText },
+        { title: 'Pendências', url: `/projects/${projectId}/pending`, icon: AlertCircle },
+      ]
+    : []
 
   return (
     <SidebarProvider>
@@ -77,7 +79,12 @@ export default function Layout() {
                     <SidebarMenuItem key={item.title}>
                       <SidebarMenuButton
                         asChild
-                        isActive={location.pathname === item.url || (item.url === '/projects' && !projectId && location.pathname.startsWith('/projects'))}
+                        isActive={
+                          location.pathname === item.url ||
+                          (item.url === '/projects' &&
+                            !projectId &&
+                            location.pathname.startsWith('/projects'))
+                        }
                         tooltip={item.title}
                       >
                         <Link to={item.url}>
@@ -90,7 +97,7 @@ export default function Layout() {
                 </SidebarMenu>
               </SidebarGroupContent>
             </SidebarGroup>
-            
+
             {projectId && (
               <SidebarGroup>
                 <SidebarGroupLabel>Projeto Atual</SidebarGroupLabel>
@@ -114,7 +121,6 @@ export default function Layout() {
                 </SidebarGroupContent>
               </SidebarGroup>
             )}
-            </SidebarGroup>
           </SidebarContent>
         </Sidebar>
 
