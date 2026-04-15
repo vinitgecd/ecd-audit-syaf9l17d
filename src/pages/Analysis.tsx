@@ -85,7 +85,7 @@ export default function Analysis() {
   })
 
   useEffect(() => {
-    if (storeLoading || storeError || accounts.length === 0) return;
+    if (storeLoading || storeError || accounts.length === 0) return
 
     setIsCalculating(true)
     const timer = setTimeout(() => {
@@ -102,7 +102,7 @@ export default function Analysis() {
 
         // For very large datasets, using a Map and grouping by id is faster
         const accMap = new Map()
-        accounts.forEach(a => accMap.set(a.id, a))
+        accounts.forEach((a) => accMap.set(a.id, a))
 
         items.forEach((item) => {
           const acc = accMap.get(item.account_id)
@@ -150,7 +150,8 @@ export default function Analysis() {
         const endividamento =
           ativoCirculante + ativoNaoCirculante > 0
             ? (
-                ((passivoCirculante + passivoNaoCirculante) / (ativoCirculante + ativoNaoCirculante)) *
+                ((passivoCirculante + passivoNaoCirculante) /
+                  (ativoCirculante + ativoNaoCirculante)) *
                 100
               ).toFixed(1)
             : '0.0'
@@ -183,7 +184,7 @@ export default function Analysis() {
     return () => clearTimeout(timer)
   }, [accounts, items, storeLoading, storeError])
 
-  const isLoadingData = loading || isCalculating;
+  const isLoadingData = loading || isCalculating
   const [showSlowWarning, setShowSlowWarning] = useState(false)
 
   useEffect(() => {
@@ -204,8 +205,12 @@ export default function Analysis() {
           <div className="bg-amber-50 text-amber-800 p-4 rounded-md border border-amber-200 flex items-center gap-3 mb-4 animate-in fade-in slide-in-from-top-2">
             <Loader2 className="h-5 w-5 animate-spin" />
             <div>
-              <p className="font-medium text-sm">Processando conjunto de dados extenso, por favor aguarde...</p>
-              <p className="text-xs opacity-80">Isso pode levar alguns segundos dependendo do volume de dados contábeis.</p>
+              <p className="font-medium text-sm">
+                Processando conjunto de dados extenso, por favor aguarde...
+              </p>
+              <p className="text-xs opacity-80">
+                Isso pode levar alguns segundos dependendo do volume de dados contábeis.
+              </p>
             </div>
           </div>
         )}
@@ -217,39 +222,42 @@ export default function Analysis() {
           <Skeleton className="h-10 w-[180px]" />
         </div>
         {accounts.length === 0 && !isLoadingData && !error ? (
-        <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center flex flex-col items-center justify-center">
-          <p className="text-lg font-semibold text-foreground">Projeto sem dados contábeis</p>
-          <p className="text-muted-foreground mt-1 mb-4">Importe um arquivo SPED ECD na seção "Importar" para visualizar os indicadores e gráficos.</p>
-        </div>
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i}>
-              <CardHeader className="pb-2">
-                <Skeleton className="h-4 w-24" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="h-8 w-20 mb-1" />
-                <Skeleton className="h-3 w-32" />
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-        <div className="grid gap-6 md:grid-cols-2">
-          <Card>
-            <CardContent className="h-[300px] flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="h-[300px] flex items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-            </CardContent>
-          </Card>
-        </div>
-        </>
-      )}
+          <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center flex flex-col items-center justify-center">
+            <p className="text-lg font-semibold text-foreground">Projeto sem dados contábeis</p>
+            <p className="text-muted-foreground mt-1 mb-4">
+              Importe um arquivo SPED ECD na seção "Importar" para visualizar os indicadores e
+              gráficos.
+            </p>
+          </div>
+        ) : (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <Card key={i}>
+                  <CardHeader className="pb-2">
+                    <Skeleton className="h-4 w-24" />
+                  </CardHeader>
+                  <CardContent>
+                    <Skeleton className="h-8 w-20 mb-1" />
+                    <Skeleton className="h-3 w-32" />
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+            <div className="grid gap-6 md:grid-cols-2">
+              <Card>
+                <CardContent className="h-[300px] flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </CardContent>
+              </Card>
+              <Card>
+                <CardContent className="h-[300px] flex items-center justify-center">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        )}
       </div>
     )
   }
@@ -445,8 +453,6 @@ export default function Analysis() {
           </div>
         </CardContent>
       </Card>
-    </>
-  )}
-</div>
-)
+    </div>
+  )
 }
