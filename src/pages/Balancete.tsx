@@ -9,6 +9,7 @@ import {
   ChevronRight,
   ChevronDown,
   RefreshCw,
+  Loader2,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -102,76 +103,117 @@ export default function Balancete() {
     setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }))
   }, [])
 
-  const { processedData, parentMap } = useMemo(() => {
-    const analyticalBalances = new Map<
-      string,
-      { saldoInicial: number; debits: number; credits: number }
-    >()
-    accounts.forEach((acc) =>
-      analyticalBalances.set(acc.id, { saldoInicial: 0, debits: 0, credits: 0 }),
-    )
+  const [isCalculating, setIsCalculating] = useState(false)
+  const [calculationResult, setCalculationResult] = useState<{
+    processedData: any[]
+    parentMap: Map<string, string | undefined>
+  }>({
+    processedData: [],
+    parentMap: new Map(),
+  })
 
-    items.forEach((item) => {
-      const accBal = analyticalBalances.get(item.account_id)
-      if (accBal) {
-        if (item.type === 'debit') accBal.debits += item.value
-        if (item.type === 'credit') accBal.credits += item.value
+  useEffect(() => {
+    if (loading || error) return
+    if (accounts.length === 0) {
+      setCalculationResult({ processedData: [], parentMap: new Map() })
+      return
+    }
+
+    setIsCalculating(true)
+
+    const timer = setTimeout(() => {
+      try {
+        const analyticalBalances = new Map<
+          string,
+          { saldoInicial: number; debits: number; credits: number }
+        >()
+        accounts.forEach((acc) =>
+          analyticalBalances.set(acc.id, { saldoInicial: 0, debits: 0, credits: 0 }),
+        )
+
+        items.forEach((item) => {
+          const accBal = analyticalBalances.get(item.account_id)
+          if (accBal) {
+            if (item.type === 'debit') accBal.debits += item.value
+            if (item.type === 'credit') accBal.credits += item.value
+          }
+        })
+
+        const accountsByLevel = [...accounts].sort((a, b) => (b.level || 0) - (a.level || 0))
+        const finalBalances = new Map<
+          string,
+          { saldoInicial: number; debits: number; credits: number }
+        >()
+
+        accounts.forEach((acc) => {
+          finalBalances.set(acc.id, { ...analyticalBalances.get(acc.id)! })
+        })
+
+        accountsByLevel.forEach((acc) => {
+          if (acc.parent_id) {
+            const parentBal = finalBalances.get(acc.parent_id)
+            const myBal = finalBalances.get(acc.id)
+            if (parentBal && myBal) {
+              parentBal.saldoInicial += myBal.saldoInicial
+              parentBal.debits += myBal.debits
+              parentBal.credits += myBal.credits
+            }
+          }
+        })
+
+        const finalRows = accounts.map((acc) => {
+          const bal = finalBalances.get(acc.id)!
+          const totalDebitos = bal.debits
+          const totalCreditos = bal.credits
+          const saldoInicial = bal.saldoInicial
+
+          let balanceValue = totalDebitos - totalCreditos
+          let dcFinal = balanceValue > 0 ? 'D' : balanceValue < 0 ? 'C' : ''
+          let finalBalance = Math.abs(balanceValue)
+
+          return {
+            ...acc,
+            nivel: acc.level || 1,
+            codigo: acc.code,
+            conta: acc.name,
+            tipo: acc.is_group ? 'S' : 'A',
+            saldoInicial: Math.abs(saldoInicial),
+            dcInicial: saldoInicial > 0 ? 'D' : saldoInicial < 0 ? 'C' : '',
+            totalDebitos,
+            totalCreditos,
+            saldoFinal: finalBalance,
+            dcFinal,
+            categoria: acc.type,
+          }
+        })
+
+        const sortedData = finalRows.sort((a, b) => a.codigo.localeCompare(b.codigo))
+        const pMap = new Map(sortedData.map((d) => [d.id, d.parent_id]))
+
+        setCalculationResult({ processedData: sortedData, parentMap: pMap })
+      } finally {
+        setIsCalculating(false)
       }
-    })
+    }, 50)
 
-    const accountsByLevel = [...accounts].sort((a, b) => (b.level || 0) - (a.level || 0))
-    const finalBalances = new Map<
-      string,
-      { saldoInicial: number; debits: number; credits: number }
-    >()
+    return () => clearTimeout(timer)
+  }, [accounts, items, loading, error])
 
-    accounts.forEach((acc) => {
-      finalBalances.set(acc.id, { ...analyticalBalances.get(acc.id)! })
-    })
+  const { processedData, parentMap } = calculationResult
 
-    accountsByLevel.forEach((acc) => {
-      if (acc.parent_id) {
-        const parentBal = finalBalances.get(acc.parent_id)
-        const myBal = finalBalances.get(acc.id)
-        if (parentBal && myBal) {
-          parentBal.saldoInicial += myBal.saldoInicial
-          parentBal.debits += myBal.debits
-          parentBal.credits += myBal.credits
-        }
-      }
-    })
+  const isLoadingData = loading || isCalculating
+  const [showSlowWarning, setShowSlowWarning] = useState(false)
 
-    const finalRows = accounts.map((acc) => {
-      const bal = finalBalances.get(acc.id)!
-      const totalDebitos = bal.debits
-      const totalCreditos = bal.credits
-      const saldoInicial = bal.saldoInicial
-
-      let balanceValue = totalDebitos - totalCreditos
-      let dcFinal = balanceValue > 0 ? 'D' : balanceValue < 0 ? 'C' : ''
-      let finalBalance = Math.abs(balanceValue)
-
-      return {
-        ...acc,
-        nivel: acc.level || 1,
-        codigo: acc.code,
-        conta: acc.name,
-        tipo: acc.is_group ? 'S' : 'A',
-        saldoInicial: Math.abs(saldoInicial),
-        dcInicial: saldoInicial > 0 ? 'D' : saldoInicial < 0 ? 'C' : '',
-        totalDebitos,
-        totalCreditos,
-        saldoFinal: finalBalance,
-        dcFinal,
-        categoria: acc.type,
-      }
-    })
-
-    const sortedData = finalRows.sort((a, b) => a.codigo.localeCompare(b.codigo))
-    const pMap = new Map(sortedData.map((d) => [d.id, d.parent_id]))
-
-    return { processedData: sortedData, parentMap: pMap }
-  }, [accounts, items])
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    if (isLoadingData) {
+      setShowSlowWarning(false)
+      timer = setTimeout(() => setShowSlowWarning(true), 2000)
+    } else {
+      setShowSlowWarning(false)
+    }
+    return () => clearTimeout(timer)
+  }, [isLoadingData])
 
   const filteredData = useMemo(() => {
     return processedData.filter((row) => {
@@ -310,43 +352,31 @@ export default function Balancete() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {loading ? (
-              <>
-                {Array.from({ length: 15 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell>
-                      <Skeleton className="h-4 w-4" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-24" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-full max-w-[200px]" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-4 mx-auto" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-20 ml-auto" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-4 mx-auto" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-20 ml-auto" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-20 ml-auto" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-20 ml-auto" />
-                    </TableCell>
-                    <TableCell>
-                      <Skeleton className="h-4 w-4 mx-auto" />
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </>
+            {isLoadingData ? (
+              <TableRow>
+                <TableCell colSpan={10} className="h-[400px] text-center">
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <Loader2 className="h-10 w-10 animate-spin text-primary" />
+                    <p className="text-lg font-medium text-foreground">
+                      {loading
+                        ? 'Buscando dados no servidor...'
+                        : 'Processando árvore do balancete...'}
+                    </p>
+                    {showSlowWarning ? (
+                      <p className="text-sm font-medium text-amber-600 animate-pulse bg-amber-50 p-2 rounded-md">
+                        Processando arquivo grande, por favor aguarde... Isso pode levar alguns
+                        segundos.
+                      </p>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        {loading
+                          ? 'Aguardando resposta do servidor'
+                          : 'Calculando totais e totalizadores'}
+                      </p>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
             ) : error ? (
               <TableRow>
                 <TableCell colSpan={10} className="h-32 text-center">
@@ -364,10 +394,23 @@ export default function Balancete() {
                   </div>
                 </TableCell>
               </TableRow>
+            ) : accounts.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={10} className="h-32 text-center">
+                  <div className="flex flex-col items-center justify-center text-muted-foreground gap-2 py-8">
+                    <FileText className="h-12 w-12 text-muted-foreground/50" />
+                    <p className="font-medium text-lg">Balancete Vazio</p>
+                    <p className="text-sm">
+                      Nenhum dado financeiro encontrado para este projeto. Importe o arquivo do SPED
+                      ECD para visualizar o balancete.
+                    </p>
+                  </div>
+                </TableCell>
+              </TableRow>
             ) : filteredData.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={10} className="h-32 text-center text-muted-foreground">
-                  Nenhum dado financeiro encontrado para este projeto.
+                  Nenhum resultado encontrado para os filtros aplicados.
                 </TableCell>
               </TableRow>
             ) : (

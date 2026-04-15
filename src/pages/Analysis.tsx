@@ -75,94 +75,140 @@ export default function Analysis() {
   const loading = storeLoading || localLoading
   const error = storeError
 
-  const metrics = useMemo(() => {
-    let ativoCirculante = 0
-    let ativoNaoCirculante = 0
-    let passivoCirculante = 0
-    let passivoNaoCirculante = 0
-    let patrimonioLiquido = 0
-    let totalReceitas = 0
-    let totalDespesas = 0
+  const [isCalculating, setIsCalculating] = useState(false)
+  const [metrics, setMetrics] = useState({
+    liquidezCorrente: '0.00',
+    endividamento: '0.0',
+    margemLiquida: '0.0',
+    monthlyData: [] as any[],
+    balanceData: [] as any[],
+  })
 
-    const accountBalances: Record<string, number> = {}
+  useEffect(() => {
+    if (storeLoading || storeError || accounts.length === 0) return;
 
-    items.forEach((item) => {
-      const acc = accounts.find((a) => a.id === item.account_id)
-      if (!acc) return
+    setIsCalculating(true)
+    const timer = setTimeout(() => {
+      try {
+        let ativoCirculante = 0
+        let ativoNaoCirculante = 0
+        let passivoCirculante = 0
+        let passivoNaoCirculante = 0
+        let patrimonioLiquido = 0
+        let totalReceitas = 0
+        let totalDespesas = 0
 
-      const isCreditNormal =
-        acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
-      const effect = isCreditNormal
-        ? item.type === 'credit'
-          ? item.value
-          : -item.value
-        : item.type === 'debit'
-          ? item.value
-          : -item.value
+        const accountBalances: Record<string, number> = {}
 
-      accountBalances[acc.id] = (accountBalances[acc.id] || 0) + effect
-    })
+        // For very large datasets, using a Map and grouping by id is faster
+        const accMap = new Map()
+        accounts.forEach(a => accMap.set(a.id, a))
 
-    accounts.forEach((acc) => {
-      if (acc.is_group) return
+        items.forEach((item) => {
+          const acc = accMap.get(item.account_id)
+          if (!acc) return
 
-      const bal = accountBalances[acc.id] || 0
-      if (acc.type === 'asset') {
-        if (acc.code.startsWith('1.1') || acc.nature === '01') ativoCirculante += bal
-        else ativoNaoCirculante += bal
-      } else if (acc.type === 'liability') {
-        if (acc.code.startsWith('2.1') || acc.nature === '02') passivoCirculante += bal
-        else passivoNaoCirculante += bal
-      } else if (acc.type === 'equity') {
-        patrimonioLiquido += bal
-      } else if (acc.type === 'revenue') {
-        totalReceitas += bal
-      } else if (acc.type === 'expense') {
-        totalDespesas += bal
+          const isCreditNormal =
+            acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
+          const effect = isCreditNormal
+            ? item.type === 'credit'
+              ? item.value
+              : -item.value
+            : item.type === 'debit'
+              ? item.value
+              : -item.value
+
+          accountBalances[acc.id] = (accountBalances[acc.id] || 0) + effect
+        })
+
+        accounts.forEach((acc) => {
+          if (acc.is_group) return
+
+          const bal = accountBalances[acc.id] || 0
+          if (acc.type === 'asset') {
+            if (acc.code.startsWith('1.1') || acc.nature === '01') ativoCirculante += bal
+            else ativoNaoCirculante += bal
+          } else if (acc.type === 'liability') {
+            if (acc.code.startsWith('2.1') || acc.nature === '02') passivoCirculante += bal
+            else passivoNaoCirculante += bal
+          } else if (acc.type === 'equity') {
+            patrimonioLiquido += bal
+          } else if (acc.type === 'revenue') {
+            totalReceitas += bal
+          } else if (acc.type === 'expense') {
+            totalDespesas += bal
+          }
+        })
+
+        if (totalReceitas === 0) totalReceitas = 150000
+        if (totalDespesas === 0) totalDespesas = 90000
+        if (ativoCirculante === 0) ativoCirculante = 120000
+        if (passivoCirculante === 0) passivoCirculante = 60000
+
+        const liquidezCorrente =
+          passivoCirculante > 0 ? (ativoCirculante / passivoCirculante).toFixed(2) : '0.00'
+        const endividamento =
+          ativoCirculante + ativoNaoCirculante > 0
+            ? (
+                ((passivoCirculante + passivoNaoCirculante) / (ativoCirculante + ativoNaoCirculante)) *
+                100
+              ).toFixed(1)
+            : '0.0'
+
+        const margemLiquida =
+          totalReceitas > 0
+            ? (((totalReceitas - totalDespesas) / totalReceitas) * 100).toFixed(1)
+            : '0.0'
+
+        const monthlyData = [
+          { name: 'Jul', receitas: totalReceitas * 0.8, despesas: totalDespesas * 0.7 },
+          { name: 'Ago', receitas: totalReceitas * 0.9, despesas: totalDespesas * 0.8 },
+          { name: 'Set', receitas: totalReceitas * 1.1, despesas: totalDespesas * 1.0 },
+          { name: 'Out', receitas: totalReceitas * 1.0, despesas: totalDespesas * 0.9 },
+          { name: 'Nov', receitas: totalReceitas * 1.2, despesas: totalDespesas * 1.1 },
+          { name: 'Dez', receitas: totalReceitas, despesas: totalDespesas },
+        ]
+
+        const balanceData = [
+          { name: 'Ativo', circulante: ativoCirculante, naocirculante: ativoNaoCirculante },
+          { name: 'Passivo', circulante: passivoCirculante, naocirculante: passivoNaoCirculante },
+          { name: 'PL', circulante: patrimonioLiquido, naocirculante: 0 },
+        ]
+
+        setMetrics({ liquidezCorrente, endividamento, margemLiquida, monthlyData, balanceData })
+      } finally {
+        setIsCalculating(false)
       }
-    })
+    }, 50)
+    return () => clearTimeout(timer)
+  }, [accounts, items, storeLoading, storeError])
 
-    if (totalReceitas === 0) totalReceitas = 150000
-    if (totalDespesas === 0) totalDespesas = 90000
-    if (ativoCirculante === 0) ativoCirculante = 120000
-    if (passivoCirculante === 0) passivoCirculante = 60000
+  const isLoadingData = loading || isCalculating;
+  const [showSlowWarning, setShowSlowWarning] = useState(false)
 
-    const liquidezCorrente =
-      passivoCirculante > 0 ? (ativoCirculante / passivoCirculante).toFixed(2) : '0.00'
-    const endividamento =
-      ativoCirculante + ativoNaoCirculante > 0
-        ? (
-            ((passivoCirculante + passivoNaoCirculante) / (ativoCirculante + ativoNaoCirculante)) *
-            100
-          ).toFixed(1)
-        : '0.0'
+  useEffect(() => {
+    let timer: NodeJS.Timeout
+    if (isLoadingData) {
+      setShowSlowWarning(false)
+      timer = setTimeout(() => setShowSlowWarning(true), 2000)
+    } else {
+      setShowSlowWarning(false)
+    }
+    return () => clearTimeout(timer)
+  }, [isLoadingData])
 
-    const margemLiquida =
-      totalReceitas > 0
-        ? (((totalReceitas - totalDespesas) / totalReceitas) * 100).toFixed(1)
-        : '0.0'
-
-    const monthlyData = [
-      { name: 'Jul', receitas: totalReceitas * 0.8, despesas: totalDespesas * 0.7 },
-      { name: 'Ago', receitas: totalReceitas * 0.9, despesas: totalDespesas * 0.8 },
-      { name: 'Set', receitas: totalReceitas * 1.1, despesas: totalDespesas * 1.0 },
-      { name: 'Out', receitas: totalReceitas * 1.0, despesas: totalDespesas * 0.9 },
-      { name: 'Nov', receitas: totalReceitas * 1.2, despesas: totalDespesas * 1.1 },
-      { name: 'Dez', receitas: totalReceitas, despesas: totalDespesas },
-    ]
-
-    const balanceData = [
-      { name: 'Ativo', circulante: ativoCirculante, naocirculante: ativoNaoCirculante },
-      { name: 'Passivo', circulante: passivoCirculante, naocirculante: passivoNaoCirculante },
-      { name: 'PL', circulante: patrimonioLiquido, naocirculante: 0 },
-    ]
-
-    return { liquidezCorrente, endividamento, margemLiquida, monthlyData, balanceData }
-  }, [accounts, items])
-
-  if (loading) {
+  if (isLoadingData) {
     return (
       <div className="space-y-6 animate-pulse">
+        {showSlowWarning && (
+          <div className="bg-amber-50 text-amber-800 p-4 rounded-md border border-amber-200 flex items-center gap-3 mb-4 animate-in fade-in slide-in-from-top-2">
+            <Loader2 className="h-5 w-5 animate-spin" />
+            <div>
+              <p className="font-medium text-sm">Processando conjunto de dados extenso, por favor aguarde...</p>
+              <p className="text-xs opacity-80">Isso pode levar alguns segundos dependendo do volume de dados contábeis.</p>
+            </div>
+          </div>
+        )}
         <div className="flex justify-between items-center">
           <div>
             <Skeleton className="h-8 w-48 mb-2" />
@@ -170,7 +216,14 @@ export default function Analysis() {
           </div>
           <Skeleton className="h-10 w-[180px]" />
         </div>
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        {accounts.length === 0 && !isLoadingData && !error ? (
+        <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center flex flex-col items-center justify-center">
+          <p className="text-lg font-semibold text-foreground">Projeto sem dados contábeis</p>
+          <p className="text-muted-foreground mt-1 mb-4">Importe um arquivo SPED ECD na seção "Importar" para visualizar os indicadores e gráficos.</p>
+        </div>
+      ) : (
+        <>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => (
             <Card key={i}>
               <CardHeader className="pb-2">
@@ -390,6 +443,8 @@ export default function Analysis() {
           </div>
         </CardContent>
       </Card>
-    </div>
-  )
+    </>
+  )}
+</div>
+)
 }

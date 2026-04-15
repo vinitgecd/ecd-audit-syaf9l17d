@@ -7,6 +7,7 @@ interface AccountingState {
   accounts: Account[]
   items: EntryItem[]
   loading: boolean
+  hasLoaded: boolean
   error: Error | null
   loadData: (projectId: string, force?: boolean) => Promise<void>
 }
@@ -18,11 +19,12 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [items, setItems] = useState<EntryItem[]>([])
   const [loading, setLoading] = useState(false)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
   const loadData = useCallback(
     async (id: string, force = false) => {
-      if (!force && id === projectId && !error && accounts.length > 0) return
+      if (!force && id === projectId && hasLoaded && !error) return
 
       setLoading(true)
       setError(null)
@@ -31,6 +33,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         setAccounts(accs)
         setItems(entryItems)
         setProjectId(id)
+        setHasLoaded(true)
       } catch (e) {
         console.error(e)
         setError(e instanceof Error ? e : new Error('Failed to load accounting data'))
@@ -38,7 +41,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         setLoading(false)
       }
     },
-    [projectId, error, accounts.length],
+    [projectId, error, hasLoaded],
   )
 
   useRealtime(
@@ -68,7 +71,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   return React.createElement(
     AccountingContext.Provider,
     {
-      value: { projectId, accounts, items, loading, error, loadData },
+      value: { projectId, accounts, items, loading, hasLoaded, error, loadData },
     },
     children,
   )
