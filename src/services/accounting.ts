@@ -96,6 +96,8 @@ export const getAccountEntries = (accountId: string, projectId: string) =>
     filter: `account_id = "${accountId}" && entry_id.project_id = "${projectId}"`,
     expand: 'entry_id',
     sort: 'entry_id.date,created',
+    fields:
+      'id,entry_id,account_id,type,value,created,updated,expand.entry_id.id,expand.entry_id.date,expand.entry_id.description,expand.entry_id.reference',
   })
 
 export const importEcdData = (projectId: string, data: { accounts: any[]; entries: any[] }) =>
@@ -115,6 +117,8 @@ export const getEntryItemsByEntryIds = async (entryIds: string[]) => {
     const items = await pb.collection('entry_items').getFullList<EntryItem>({
       filter: `(${filter})`,
       expand: 'account_id',
+      fields:
+        'id,entry_id,account_id,type,value,expand.account_id.id,expand.account_id.code,expand.account_id.name',
     })
     results.push(...items)
   }

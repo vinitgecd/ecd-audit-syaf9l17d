@@ -36,7 +36,7 @@ const App = () => (
               <Route path="/projects/:projectId/import" element={<Import />} />
               <Route path="/projects/:projectId/analysis" element={<Analysis />} />
               <Route path="/projects/:projectId/balancete" element={<Balancete />} />
-              <Route path="/projects/:projectId/accounts/:accountId/ledger" element={<Razao />} />
+              <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
               <Route path="/projects/:projectId/documents" element={<Documents />} />
               <Route path="/projects/:projectId/pending" element={<Pending />} />
               <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />

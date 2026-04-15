@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 
 import { cn } from '@/lib/utils'
+import { toast } from 'sonner'
 import { useAuth } from '@/hooks/use-auth'
 import { useRealtime } from '@/hooks/use-realtime'
 import {
@@ -88,8 +89,13 @@ export default function Razao() {
   }
 
   useEffect(() => {
+    if (!accountId || !projectId) {
+      toast.error('Conta ou projeto não especificado.')
+      navigate(projectId ? `/projects/${projectId}/balancete` : '/projects', { replace: true })
+      return
+    }
     fetchLedgerData()
-  }, [accountId, projectId])
+  }, [accountId, projectId, navigate])
 
   useRealtime(
     'audit_comments',

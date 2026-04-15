@@ -378,7 +378,7 @@ export default function Balancete() {
                     style={{ height: ROW_HEIGHT }}
                     onClick={(e) =>
                       row.tipo === 'A'
-                        ? navigate(`/projects/${projectId}/accounts/${row.id}/ledger`)
+                        ? navigate(`/projects/${projectId}/razao/${row.id}`)
                         : toggleGroup(row.id, e)
                     }
                   >
