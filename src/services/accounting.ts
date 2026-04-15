@@ -6,6 +6,11 @@ export interface Account {
   code: string
   name: string
   type: 'asset' | 'liability' | 'equity' | 'revenue' | 'expense'
+  parent_id?: string
+  level?: number
+  nature?: string
+  is_group?: boolean
+  referential_code?: string
   created: string
   updated: string
 }

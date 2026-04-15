@@ -98,12 +98,14 @@ export default function Analysis() {
     })
 
     accounts.forEach((acc) => {
+      if (acc.is_group) return
+
       const bal = accountBalances[acc.id] || 0
       if (acc.type === 'asset') {
-        if (acc.code.startsWith('1.1')) ativoCirculante += bal
+        if (acc.code.startsWith('1.1') || acc.nature === '01') ativoCirculante += bal
         else ativoNaoCirculante += bal
       } else if (acc.type === 'liability') {
-        if (acc.code.startsWith('2.1')) passivoCirculante += bal
+        if (acc.code.startsWith('2.1') || acc.nature === '02') passivoCirculante += bal
         else passivoNaoCirculante += bal
       } else if (acc.type === 'equity') {
         patrimonioLiquido += bal

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react'
+import { useState, useMemo, useEffect, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import {
   FileText,
@@ -9,6 +9,8 @@ import {
   Settings2,
   X,
   Loader2,
+  ChevronRight,
+  ChevronDown,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -50,6 +52,7 @@ export default function Balancete() {
   const [accounts, setAccounts] = useState<Account[]>([])
   const [items, setItems] = useState<EntryItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
 
   const loadData = async (id: string) => {
     setLoading(true)
@@ -57,6 +60,17 @@ export default function Balancete() {
       const [accs, entryItems] = await Promise.all([getAccounts(id), getEntryItems(id)])
       setAccounts(accs)
       setItems(entryItems)
+
+      const initialExpanded: Record<string, boolean> = {}
+      accs.forEach((a) => {
+        if (
+          a.is_group ||
+          (!a.is_group && accs.some((child) => child.code.startsWith(a.code) && child.id !== a.id))
+        ) {
+          initialExpanded[a.id] = true
+        }
+      })
+      setExpandedGroups(initialExpanded)
     } catch (e) {
       console.error(e)
     } finally {
@@ -80,8 +94,13 @@ export default function Balancete() {
     if (projectId) loadData(projectId)
   })
 
+  const toggleGroup = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }))
+  }, [])
+
   const processedData = useMemo(() => {
-    const rows = accounts.map((acc) => {
+    const analyticalBalances = accounts.map((acc) => {
       const accountItems = items.filter((i) => i.account_id === acc.id)
       let periodDebits = 0
       let periodCredits = 0
@@ -92,22 +111,47 @@ export default function Balancete() {
       })
 
       return {
-        ...acc,
+        id: acc.id,
         directDebits: periodDebits,
         directCredits: periodCredits,
       }
     })
 
-    const finalRows = rows.map((acc) => {
-      const children = rows.filter((r) => r.code.startsWith(acc.code))
+    const getDescendantBalances = (acc: Account) => {
+      const descendants = accounts.filter(
+        (r) =>
+          r.parent_id === acc.id ||
+          (r.code !== acc.code && r.code.startsWith(acc.code + '.')) ||
+          (r.code !== acc.code && r.code.startsWith(acc.code) && !acc.code.includes('.')),
+      )
 
-      let totalDebitos = 0
-      let totalCreditos = 0
+      let totalDebitos = analyticalBalances.find((b) => b.id === acc.id)?.directDebits || 0
+      let totalCreditos = analyticalBalances.find((b) => b.id === acc.id)?.directCredits || 0
 
-      children.forEach((child) => {
-        totalDebitos += child.directDebits
-        totalCreditos += child.directCredits
+      descendants.forEach((child) => {
+        const isChildAnalytical =
+          !child.is_group &&
+          !accounts.some(
+            (r) =>
+              r.parent_id === child.id ||
+              (r.code !== child.code && r.code.startsWith(child.code + '.')),
+          )
+        if (isChildAnalytical || !child.is_group) {
+          totalDebitos += analyticalBalances.find((b) => b.id === child.id)?.directDebits || 0
+          totalCreditos += analyticalBalances.find((b) => b.id === child.id)?.directCredits || 0
+        }
       })
+
+      return { totalDebitos, totalCreditos }
+    }
+
+    const finalRows = accounts.map((acc) => {
+      const { totalDebitos, totalCreditos } = acc.is_group
+        ? getDescendantBalances(acc)
+        : {
+            totalDebitos: analyticalBalances.find((b) => b.id === acc.id)?.directDebits || 0,
+            totalCreditos: analyticalBalances.find((b) => b.id === acc.id)?.directCredits || 0,
+          }
 
       let finalBalance = totalDebitos - totalCreditos
       const isCreditNormal =
@@ -117,11 +161,11 @@ export default function Balancete() {
         finalBalance = totalCreditos - totalDebitos
       }
 
-      const isAnalytical = !rows.some((r) => r.code !== acc.code && r.code.startsWith(acc.code))
+      const isAnalytical = !acc.is_group && !accounts.some((r) => r.parent_id === acc.id)
 
       return {
-        id: acc.id,
-        nivel: acc.code.split('.').length,
+        ...acc,
+        nivel: acc.level || acc.code.split('.').length,
         codigo: acc.code,
         conta: acc.name,
         tipo: isAnalytical ? 'A' : 'S',
@@ -144,7 +188,7 @@ export default function Balancete() {
       }
     })
 
-    return finalRows
+    return finalRows.sort((a, b) => a.codigo.localeCompare(b.codigo))
   }, [accounts, items])
 
   const filteredData = useMemo(() => {
@@ -155,12 +199,35 @@ export default function Balancete() {
       const matchesCategory =
         category === 'all' || row.categoria.toLowerCase() === category.toLowerCase()
       const matchesNivel = row.nivel <= parseInt(maxNivel || '20', 10)
-      return matchesSearch && matchesCategory && matchesNivel
+
+      let isVisible = true
+      if (!matchesSearch && searchTerm === '') {
+        let currentParent = row.parent_id
+        while (currentParent && isVisible) {
+          if (expandedGroups[currentParent] === false) {
+            isVisible = false
+          }
+          currentParent = processedData.find((p) => p.id === currentParent)?.parent_id
+        }
+
+        if (!row.parent_id) {
+          const parts = row.codigo.split('.')
+          for (let i = 1; i < parts.length; i++) {
+            const ancestorCode = parts.slice(0, i).join('.')
+            const ancestor = processedData.find((p) => p.codigo === ancestorCode)
+            if (ancestor && expandedGroups[ancestor.id] === false) {
+              isVisible = false
+            }
+          }
+        }
+      }
+
+      return matchesSearch && matchesCategory && matchesNivel && isVisible
     })
-  }, [processedData, searchTerm, category, maxNivel])
+  }, [processedData, searchTerm, category, maxNivel, expandedGroups])
 
   const getRowStyle = (nivel: number, tipo: string) => {
-    if (nivel === 1) return 'bg-primary text-primary-foreground font-bold hover:bg-primary/90'
+    if (nivel === 1) return 'bg-primary/10 text-primary font-bold hover:bg-primary/20'
     if (nivel === 2) return 'bg-muted font-semibold'
     if (nivel === 3) return 'bg-muted/50 font-medium'
     if (tipo === 'S') return 'font-medium'
@@ -169,10 +236,9 @@ export default function Balancete() {
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
-      {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-card p-4 rounded-lg border shadow-sm gap-4">
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <h2 className="text-lg font-bold text-foreground">Balancete</h2>
+          <h2 className="text-lg font-bold text-foreground">Balancete Hierárquico</h2>
         </div>
 
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
@@ -203,17 +269,9 @@ export default function Balancete() {
               min="1"
             />
           </div>
-
-          <div className="flex items-center gap-2 border-l pl-2 ml-2">
-            <span className="text-sm whitespace-nowrap hidden md:inline">Período Completo</span>
-            <Button variant="outline" size="sm" className="h-8 whitespace-nowrap">
-              Alterar
-            </Button>
-          </div>
         </div>
       </div>
 
-      {/* Filters Bar */}
       <div className="flex gap-4 items-center">
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -242,7 +300,6 @@ export default function Balancete() {
         </div>
       </div>
 
-      {/* Main Table Area */}
       <div className="rounded-md border bg-card flex-1 overflow-auto">
         <Table className="relative min-w-[1000px]">
           <TableHeader className="sticky top-0 bg-background z-10 shadow-sm">
@@ -283,12 +340,35 @@ export default function Balancete() {
                     'cursor-pointer transition-colors py-1 h-10 hover:bg-muted/80',
                     getRowStyle(row.nivel, row.tipo),
                   )}
-                  onClick={() => navigate(`/projects/${projectId}/accounts/${row.id}/ledger`)}
+                  onClick={() =>
+                    row.tipo === 'A'
+                      ? navigate(`/projects/${projectId}/accounts/${row.id}/ledger`)
+                      : toggleGroup(row.id, { stopPropagation: () => {} } as any)
+                  }
                 >
                   <TableCell className="py-2">{row.nivel}</TableCell>
                   <TableCell className="py-2 font-mono text-xs">{row.codigo}</TableCell>
                   <TableCell className="py-2 truncate max-w-[300px]" title={row.conta}>
-                    <span style={{ paddingLeft: `${(row.nivel - 1) * 12}px` }}>{row.conta}</span>
+                    <div
+                      className="flex items-center gap-1"
+                      style={{ paddingLeft: `${(row.nivel - 1) * 12}px` }}
+                    >
+                      {row.tipo === 'S' ? (
+                        <div
+                          onClick={(e) => toggleGroup(row.id, e)}
+                          className="p-0.5 hover:bg-muted rounded cursor-pointer"
+                        >
+                          {expandedGroups[row.id] ? (
+                            <ChevronDown className="h-4 w-4" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4" />
+                          )}
+                        </div>
+                      ) : (
+                        <div className="w-5" />
+                      )}
+                      <span>{row.conta}</span>
+                    </div>
                   </TableCell>
                   <TableCell className="py-2 text-center">{row.tipo}</TableCell>
                   <TableCell className="py-2 text-right tabular-nums">

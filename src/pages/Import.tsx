@@ -70,35 +70,91 @@ export default function Import() {
         if (id === 'ecd' && projectId) {
           try {
             updateTab(id, { progress: 30 })
+            const accAtivo = await createAccount({
+              project_id: projectId,
+              code: '1',
+              name: 'Ativo',
+              type: 'asset',
+              is_group: true,
+              level: 1,
+              nature: '01',
+            })
+            const accAtivoCirc = await createAccount({
+              project_id: projectId,
+              code: '1.1',
+              name: 'Ativo Circulante',
+              type: 'asset',
+              is_group: true,
+              level: 2,
+              parent_id: accAtivo.id,
+              nature: '01',
+            })
+            const accDisponibilidades = await createAccount({
+              project_id: projectId,
+              code: '1.1.01',
+              name: 'Disponibilidades',
+              type: 'asset',
+              is_group: true,
+              level: 3,
+              parent_id: accAtivoCirc.id,
+              nature: '01',
+            })
             const accCaixa = await createAccount({
               project_id: projectId,
               code: '1.1.01.01',
-              name: 'Caixa',
+              name: 'Caixa Geral',
               type: 'asset',
+              is_group: false,
+              level: 4,
+              parent_id: accDisponibilidades.id,
+              nature: '01',
             })
             const accBanco = await createAccount({
               project_id: projectId,
               code: '1.1.01.02',
               name: 'Bancos Conta Movimento',
               type: 'asset',
+              is_group: false,
+              level: 4,
+              parent_id: accDisponibilidades.id,
+              nature: '01',
+            })
+            const accPassivo = await createAccount({
+              project_id: projectId,
+              code: '2',
+              name: 'Passivo',
+              type: 'liability',
+              is_group: true,
+              level: 1,
+              nature: '02',
             })
             const accFornecedores = await createAccount({
               project_id: projectId,
               code: '2.1.01.01',
               name: 'Fornecedores',
               type: 'liability',
+              is_group: false,
+              level: 4,
+              parent_id: accPassivo.id,
+              nature: '02',
             })
             const accReceita = await createAccount({
               project_id: projectId,
               code: '3.1.01.01',
               name: 'Receita de Serviços',
               type: 'revenue',
+              is_group: false,
+              level: 4,
+              nature: '03',
             })
             const accDespesa = await createAccount({
               project_id: projectId,
               code: '4.1.01.01',
               name: 'Despesas Administrativas',
               type: 'expense',
+              is_group: false,
+              level: 4,
+              nature: '04',
             })
 
             updateTab(id, { progress: 60 })
