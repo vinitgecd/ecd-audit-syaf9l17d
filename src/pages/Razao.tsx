@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Loader2, Search, FileSpreadsheet, FileText } from 'lucide-react'
+import { ArrowLeft, Search, FileSpreadsheet, FileText } from 'lucide-react'
 import { format, parseISO } from 'date-fns'
 
 import { Button } from '@/components/ui/button'
@@ -14,6 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
+import { Skeleton } from '@/components/ui/skeleton'
 
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/hooks/use-auth'
@@ -41,14 +42,16 @@ export default function Razao() {
   const [counterparts, setCounterparts] = useState<Record<string, EntryItem[]>>({})
   const [comments, setComments] = useState<Record<string, AuditComment>>({})
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState('')
   const [startDate, setStartDate] = useState('')
   const [endDate, setEndDate] = useState('')
 
-  useEffect(() => {
+  const fetchLedgerData = () => {
     if (!accountId || !projectId) return
     setLoading(true)
+    setError(null)
 
     Promise.all([
       getAccount(accountId),
@@ -79,8 +82,13 @@ export default function Razao() {
       })
       .catch((err) => {
         console.error(err)
+        setError('Falha ao carregar os dados do razão analítico.')
         setLoading(false)
       })
+  }
+
+  useEffect(() => {
+    fetchLedgerData()
   }, [accountId, projectId])
 
   useRealtime(
@@ -457,11 +465,42 @@ export default function Razao() {
           </TableHeader>
           <TableBody>
             {loading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={`skeleton-${i}`}>
+                  <TableCell>
+                    <Skeleton className="h-4 w-20" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-full max-w-[180px]" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-24" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-full max-w-[180px]" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-16 ml-auto" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-16 ml-auto" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-20 ml-auto" />
+                  </TableCell>
+                  <TableCell>
+                    <Skeleton className="h-4 w-8" />
+                  </TableCell>
+                </TableRow>
+              ))
+            ) : error ? (
               <TableRow>
                 <TableCell colSpan={8} className="h-48 text-center">
-                  <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
-                    <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                    <span className="font-medium">Carregando razão analítico...</span>
+                  <div className="flex flex-col items-center justify-center text-destructive gap-4">
+                    <p className="font-medium">{error}</p>
+                    <Button variant="outline" onClick={fetchLedgerData}>
+                      Tentar Novamente
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>
@@ -471,7 +510,7 @@ export default function Razao() {
                   <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
                     <FileText className="h-8 w-8 opacity-50" />
                     <p className="font-medium text-base text-foreground">
-                      Nenhum lançamento encontrado
+                      Nenhum lançamento encontrado para o período ou critérios selecionados
                     </p>
                     <p className="text-sm">Não há dados de razão para esta conta.</p>
                     <p className="text-xs opacity-75 mt-1">
@@ -507,7 +546,7 @@ export default function Razao() {
                       <div className="flex flex-col items-center justify-center text-muted-foreground gap-2">
                         <Search className="h-8 w-8 opacity-50" />
                         <p className="font-medium text-base text-foreground">
-                          Nenhum resultado para os filtros
+                          Nenhum lançamento encontrado para o período ou critérios selecionados
                         </p>
                         <p className="text-sm">
                           Tente limpar ou alterar as datas e o termo de busca.
