@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -35,10 +35,11 @@ export default function Analysis() {
 
   const {
     accounts,
-    items,
     loading: storeLoading,
+    isProcessing,
     error: storeError,
     loadData,
+    processedAnalysis,
   } = useAccountingStore()
 
   const [pendingCount, setPendingCount] = useState(0)
@@ -72,119 +73,18 @@ export default function Analysis() {
     !!projectId,
   )
 
-  const loading = storeLoading || localLoading
+  const loading = storeLoading || isProcessing || localLoading
   const error = storeError
 
-  const [isCalculating, setIsCalculating] = useState(false)
-  const [metrics, setMetrics] = useState({
+  const metrics = processedAnalysis || {
     liquidezCorrente: '0.00',
     endividamento: '0.0',
     margemLiquida: '0.0',
-    monthlyData: [] as any[],
-    balanceData: [] as any[],
-  })
+    monthlyData: [],
+    balanceData: [],
+  }
 
-  useEffect(() => {
-    if (storeLoading || storeError || accounts.length === 0) return
-
-    setIsCalculating(true)
-    const timer = setTimeout(() => {
-      try {
-        let ativoCirculante = 0
-        let ativoNaoCirculante = 0
-        let passivoCirculante = 0
-        let passivoNaoCirculante = 0
-        let patrimonioLiquido = 0
-        let totalReceitas = 0
-        let totalDespesas = 0
-
-        const accountBalances: Record<string, number> = {}
-
-        // For very large datasets, using a Map and grouping by id is faster
-        const accMap = new Map()
-        accounts.forEach((a) => accMap.set(a.id, a))
-
-        items.forEach((item) => {
-          const acc = accMap.get(item.account_id)
-          if (!acc) return
-
-          const isCreditNormal =
-            acc.type === 'liability' || acc.type === 'equity' || acc.type === 'revenue'
-          const effect = isCreditNormal
-            ? item.type === 'credit'
-              ? item.value
-              : -item.value
-            : item.type === 'debit'
-              ? item.value
-              : -item.value
-
-          accountBalances[acc.id] = (accountBalances[acc.id] || 0) + effect
-        })
-
-        accounts.forEach((acc) => {
-          if (acc.is_group) return
-
-          const bal = accountBalances[acc.id] || 0
-          if (acc.type === 'asset') {
-            if (acc.code.startsWith('1.1') || acc.nature === '01') ativoCirculante += bal
-            else ativoNaoCirculante += bal
-          } else if (acc.type === 'liability') {
-            if (acc.code.startsWith('2.1') || acc.nature === '02') passivoCirculante += bal
-            else passivoNaoCirculante += bal
-          } else if (acc.type === 'equity') {
-            patrimonioLiquido += bal
-          } else if (acc.type === 'revenue') {
-            totalReceitas += bal
-          } else if (acc.type === 'expense') {
-            totalDespesas += bal
-          }
-        })
-
-        if (totalReceitas === 0) totalReceitas = 150000
-        if (totalDespesas === 0) totalDespesas = 90000
-        if (ativoCirculante === 0) ativoCirculante = 120000
-        if (passivoCirculante === 0) passivoCirculante = 60000
-
-        const liquidezCorrente =
-          passivoCirculante > 0 ? (ativoCirculante / passivoCirculante).toFixed(2) : '0.00'
-        const endividamento =
-          ativoCirculante + ativoNaoCirculante > 0
-            ? (
-                ((passivoCirculante + passivoNaoCirculante) /
-                  (ativoCirculante + ativoNaoCirculante)) *
-                100
-              ).toFixed(1)
-            : '0.0'
-
-        const margemLiquida =
-          totalReceitas > 0
-            ? (((totalReceitas - totalDespesas) / totalReceitas) * 100).toFixed(1)
-            : '0.0'
-
-        const monthlyData = [
-          { name: 'Jul', receitas: totalReceitas * 0.8, despesas: totalDespesas * 0.7 },
-          { name: 'Ago', receitas: totalReceitas * 0.9, despesas: totalDespesas * 0.8 },
-          { name: 'Set', receitas: totalReceitas * 1.1, despesas: totalDespesas * 1.0 },
-          { name: 'Out', receitas: totalReceitas * 1.0, despesas: totalDespesas * 0.9 },
-          { name: 'Nov', receitas: totalReceitas * 1.2, despesas: totalDespesas * 1.1 },
-          { name: 'Dez', receitas: totalReceitas, despesas: totalDespesas },
-        ]
-
-        const balanceData = [
-          { name: 'Ativo', circulante: ativoCirculante, naocirculante: ativoNaoCirculante },
-          { name: 'Passivo', circulante: passivoCirculante, naocirculante: passivoNaoCirculante },
-          { name: 'PL', circulante: patrimonioLiquido, naocirculante: 0 },
-        ]
-
-        setMetrics({ liquidezCorrente, endividamento, margemLiquida, monthlyData, balanceData })
-      } finally {
-        setIsCalculating(false)
-      }
-    }, 50)
-    return () => clearTimeout(timer)
-  }, [accounts, items, storeLoading, storeError])
-
-  const isLoadingData = loading || isCalculating
+  const isLoadingData = loading
   const [showSlowWarning, setShowSlowWarning] = useState(false)
 
   useEffect(() => {
@@ -206,10 +106,8 @@ export default function Analysis() {
             <Loader2 className="h-5 w-5 animate-spin" />
             <div>
               <p className="font-medium text-sm">
-                Processando conjunto de dados extenso, por favor aguarde...
-              </p>
-              <p className="text-xs opacity-80">
-                Isso pode levar alguns segundos dependendo do volume de dados contábeis.
+                Processando arquivo grande, por favor aguarde... Isso pode levar alguns minutos
+                dependendo do tamanho da sua ECD
               </p>
             </div>
           </div>

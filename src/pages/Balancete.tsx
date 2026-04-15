@@ -29,7 +29,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
-import { Skeleton } from '@/components/ui/skeleton'
 import useAccountingStore from '@/stores/useAccountingStore'
 
 const formatNum = (val: number) =>
@@ -39,7 +38,16 @@ export default function Balancete() {
   const navigate = useNavigate()
   const { projectId } = useParams()
 
-  const { accounts, items, loading, error, loadData } = useAccountingStore()
+  const {
+    accounts,
+    loading,
+    isProcessing,
+    error,
+    loadData,
+    processedBalancete,
+    expandedGroups,
+    setExpandedGroups,
+  } = useAccountingStore()
 
   const [searchTerm, setSearchTerm] = useState('')
   const deferredSearchTerm = useDeferredValue(searchTerm)
@@ -49,8 +57,6 @@ export default function Balancete() {
 
   const [maxNivel, setMaxNivel] = useState('20')
   const deferredMaxNivel = useDeferredValue(maxNivel)
-
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({})
 
   // Virtualization constants and state
   const ROW_HEIGHT = 40
@@ -83,125 +89,15 @@ export default function Balancete() {
     }
   }, [projectId, loadData])
 
-  useEffect(() => {
-    if (accounts.length > 0) {
-      setExpandedGroups((prev) => {
-        if (Object.keys(prev).length > 0) return prev
-        const initial: Record<string, boolean> = {}
-        accounts.forEach((a) => {
-          if (a.is_group || (a.level && a.level <= 3)) {
-            initial[a.id] = true
-          }
-        })
-        return initial
-      })
-    }
-  }, [accounts])
+  const toggleGroup = useCallback(
+    (id: string, e: React.MouseEvent) => {
+      e.stopPropagation()
+      setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }))
+    },
+    [setExpandedGroups],
+  )
 
-  const toggleGroup = useCallback((id: string, e: React.MouseEvent) => {
-    e.stopPropagation()
-    setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }))
-  }, [])
-
-  const [isCalculating, setIsCalculating] = useState(false)
-  const [calculationResult, setCalculationResult] = useState<{
-    processedData: any[]
-    parentMap: Map<string, string | undefined>
-  }>({
-    processedData: [],
-    parentMap: new Map(),
-  })
-
-  useEffect(() => {
-    if (loading || error) return
-    if (accounts.length === 0) {
-      setCalculationResult({ processedData: [], parentMap: new Map() })
-      return
-    }
-
-    setIsCalculating(true)
-
-    const timer = setTimeout(() => {
-      try {
-        const analyticalBalances = new Map<
-          string,
-          { saldoInicial: number; debits: number; credits: number }
-        >()
-        accounts.forEach((acc) =>
-          analyticalBalances.set(acc.id, { saldoInicial: 0, debits: 0, credits: 0 }),
-        )
-
-        items.forEach((item) => {
-          const accBal = analyticalBalances.get(item.account_id)
-          if (accBal) {
-            if (item.type === 'debit') accBal.debits += item.value
-            if (item.type === 'credit') accBal.credits += item.value
-          }
-        })
-
-        const accountsByLevel = [...accounts].sort((a, b) => (b.level || 0) - (a.level || 0))
-        const finalBalances = new Map<
-          string,
-          { saldoInicial: number; debits: number; credits: number }
-        >()
-
-        accounts.forEach((acc) => {
-          finalBalances.set(acc.id, { ...analyticalBalances.get(acc.id)! })
-        })
-
-        accountsByLevel.forEach((acc) => {
-          if (acc.parent_id) {
-            const parentBal = finalBalances.get(acc.parent_id)
-            const myBal = finalBalances.get(acc.id)
-            if (parentBal && myBal) {
-              parentBal.saldoInicial += myBal.saldoInicial
-              parentBal.debits += myBal.debits
-              parentBal.credits += myBal.credits
-            }
-          }
-        })
-
-        const finalRows = accounts.map((acc) => {
-          const bal = finalBalances.get(acc.id)!
-          const totalDebitos = bal.debits
-          const totalCreditos = bal.credits
-          const saldoInicial = bal.saldoInicial
-
-          let balanceValue = totalDebitos - totalCreditos
-          let dcFinal = balanceValue > 0 ? 'D' : balanceValue < 0 ? 'C' : ''
-          let finalBalance = Math.abs(balanceValue)
-
-          return {
-            ...acc,
-            nivel: acc.level || 1,
-            codigo: acc.code,
-            conta: acc.name,
-            tipo: acc.is_group ? 'S' : 'A',
-            saldoInicial: Math.abs(saldoInicial),
-            dcInicial: saldoInicial > 0 ? 'D' : saldoInicial < 0 ? 'C' : '',
-            totalDebitos,
-            totalCreditos,
-            saldoFinal: finalBalance,
-            dcFinal,
-            categoria: acc.type,
-          }
-        })
-
-        const sortedData = finalRows.sort((a, b) => a.codigo.localeCompare(b.codigo))
-        const pMap = new Map(sortedData.map((d) => [d.id, d.parent_id]))
-
-        setCalculationResult({ processedData: sortedData, parentMap: pMap })
-      } finally {
-        setIsCalculating(false)
-      }
-    }, 50)
-
-    return () => clearTimeout(timer)
-  }, [accounts, items, loading, error])
-
-  const { processedData, parentMap } = calculationResult
-
-  const isLoadingData = loading || isCalculating
+  const isLoadingData = loading || isProcessing
   const [showSlowWarning, setShowSlowWarning] = useState(false)
 
   useEffect(() => {
@@ -214,6 +110,9 @@ export default function Balancete() {
     }
     return () => clearTimeout(timer)
   }, [isLoadingData])
+
+  const processedData = processedBalancete?.data || []
+  const parentMap = processedBalancete?.parentMap || new Map<string, string | undefined>()
 
   const filteredData = useMemo(() => {
     return processedData.filter((row) => {
@@ -365,7 +264,7 @@ export default function Balancete() {
                     {showSlowWarning ? (
                       <p className="text-sm font-medium text-amber-600 animate-pulse bg-amber-50 p-2 rounded-md">
                         Processando arquivo grande, por favor aguarde... Isso pode levar alguns
-                        segundos.
+                        minutos dependendo do tamanho da sua ECD
                       </p>
                     ) : (
                       <p className="text-sm text-muted-foreground">
