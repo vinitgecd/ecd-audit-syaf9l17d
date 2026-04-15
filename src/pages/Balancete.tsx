@@ -50,6 +50,8 @@ export default function Balancete() {
     processedBalancete,
     expandedGroups,
     setExpandedGroups,
+    loadChildren,
+    loadedChildren,
   } = useAccountingStore()
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -57,8 +59,10 @@ export default function Balancete() {
 
   const [category, setCategory] = useState<string>('all')
 
-  const [maxNivel, setMaxNivel] = useState('4')
-  const [debouncedNivel, setDebouncedNivel] = useState('4')
+  const [maxNivel, setMaxNivel] = useState('5')
+  const [debouncedNivel, setDebouncedNivel] = useState('5')
+
+  const [childLoadingId, setChildLoadingId] = useState<string | null>(null)
 
   const { isReady, error: dbError } = useDatabase()
 
@@ -97,16 +101,23 @@ export default function Balancete() {
 
   useEffect(() => {
     if (projectId && isReady) {
-      loadBalancete(projectId, parseInt(debouncedNivel || '4', 10), debouncedSearch)
+      loadBalancete(projectId, 0, debouncedSearch)
     }
-  }, [projectId, debouncedNivel, debouncedSearch, loadBalancete, isReady])
+  }, [projectId, debouncedSearch, loadBalancete, isReady])
 
   const toggleGroup = useCallback(
-    (id: string, e: React.MouseEvent) => {
+    async (id: string, e: React.MouseEvent) => {
       e.stopPropagation()
+
+      if (!expandedGroups[id] && !loadedChildren[id] && projectId) {
+        setChildLoadingId(id)
+        await loadChildren(projectId, id)
+        setChildLoadingId(null)
+      }
+
       setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }))
     },
-    [setExpandedGroups],
+    [setExpandedGroups, expandedGroups, loadedChildren, projectId, loadChildren],
   )
 
   const isLoadingData = loading || isProcessing
@@ -136,9 +147,13 @@ export default function Balancete() {
   const parentMap = processedBalancete?.parentMap || new Map<string, string | undefined>()
 
   const filteredData = useMemo(() => {
+    const maxLevel = parseInt(debouncedNivel || '5', 10)
+
     return processedData.filter((row) => {
       const matchesCategory =
         category === 'all' || row.categoria.toLowerCase() === category.toLowerCase()
+
+      const matchesLevel = row.nivel <= maxLevel
 
       let isVisible = true
       if (!debouncedSearch) {
@@ -152,9 +167,9 @@ export default function Balancete() {
         }
       }
 
-      return matchesCategory && isVisible
+      return matchesCategory && isVisible && matchesLevel
     })
-  }, [processedData, parentMap, debouncedSearch, category, expandedGroups])
+  }, [processedData, parentMap, debouncedSearch, category, expandedGroups, debouncedNivel])
 
   const getRowStyle = (nivel: number, tipo: string) => {
     if (nivel === 1) return 'bg-primary/10 text-primary font-bold hover:bg-primary/20'
@@ -278,8 +293,7 @@ export default function Balancete() {
                       <Button
                         variant="outline"
                         onClick={() => {
-                          setMaxNivel('1')
-                          if (projectId) loadBalancete(projectId, 1, debouncedSearch)
+                          if (projectId) loadBalancete(projectId, 0, debouncedSearch)
                         }}
                       >
                         <RefreshCw className="mr-2 h-4 w-4" />
@@ -330,14 +344,7 @@ export default function Balancete() {
                     </p>
                     <Button
                       variant="outline"
-                      onClick={() =>
-                        projectId &&
-                        loadBalancete(
-                          projectId,
-                          parseInt(debouncedNivel || '4', 10),
-                          debouncedSearch,
-                        )
-                      }
+                      onClick={() => projectId && loadBalancete(projectId, 0, debouncedSearch)}
                     >
                       <RefreshCw className="mr-2 h-4 w-4" />
                       Tentar Novamente
@@ -402,7 +409,9 @@ export default function Balancete() {
                             onClick={(e) => toggleGroup(row.id, e)}
                             className="p-0.5 hover:bg-muted rounded cursor-pointer"
                           >
-                            {expandedGroups[row.id] ? (
+                            {childLoadingId === row.id ? (
+                              <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                            ) : expandedGroups[row.id] ? (
                               <ChevronDown className="h-4 w-4 shrink-0" />
                             ) : (
                               <ChevronRight className="h-4 w-4 shrink-0" />
