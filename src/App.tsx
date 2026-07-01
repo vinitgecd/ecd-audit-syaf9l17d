@@ -13,7 +13,7 @@ import Index from './pages/Index'
 import Projects from './pages/Projects'
 import Import from './pages/Import'
 import Balancete from './pages/Balancete'
-import Documents from './pages/Documents'
+
 import Razao from './pages/Razao'
 import Pending from './pages/Pending'
 import ProjectSettings from './pages/ProjectSettings'
@@ -37,7 +37,6 @@ const App = () => (
                 <Route path="/projects/:projectId/import" element={<Import />} />
                 <Route path="/projects/:projectId/balancete" element={<Balancete />} />
                 <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
-                <Route path="/projects/:projectId/documents" element={<Documents />} />
                 <Route path="/projects/:projectId/pending" element={<Pending />} />
                 <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
               </Route>
