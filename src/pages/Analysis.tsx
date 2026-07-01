@@ -9,21 +9,26 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Progress } from '@/components/ui/progress'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { getAuditCommentsByProject } from '@/services/audit_comments'
-import { getAccounts, getFiscalYears, getEntryItemsByDateRange } from '@/services/accounting'
+import { getAccounts, getFiscalYears, getEntryItemsByDateRangeChunked } from '@/services/accounting'
 import type { Account } from '@/services/accounting'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useDatabase } from '@/contexts/DatabaseContext'
 import { AnalysisTable } from '@/components/AnalysisTable'
 import { aggregateEntryItems, computeAnalysis, type AnalysisData } from '@/lib/analysis-utils'
 
 export default function Analysis() {
   const { projectId } = useParams()
+  const { isReady } = useDatabase()
   const [fiscalYears, setFiscalYears] = useState<number[]>([])
   const [selectedYear, setSelectedYear] = useState('')
   const [accounts, setAccounts] = useState<Account[]>([])
   const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [progress, setProgress] = useState(0)
+  const [progressLabel, setProgressLabel] = useState('')
   const [pendingCount, setPendingCount] = useState(0)
 
   const loadComments = useCallback(async (id: string) => {
@@ -38,41 +43,99 @@ export default function Analysis() {
   }, [])
 
   useEffect(() => {
-    if (!projectId) return
+    if (!projectId || !isReady) return
     setLoading(true)
+    setProgress(0)
+    setProgressLabel('Carregando contas e exercícios fiscais...')
     Promise.all([getFiscalYears(projectId), getAccounts(projectId)])
       .then(([years, accs]) => {
         setFiscalYears(years)
         setAccounts(accs)
-        if (years.length > 0) setSelectedYear(String(years[0]))
-        else setLoading(false)
+        if (years.length > 0) {
+          setSelectedYear(String(years[0]))
+        } else {
+          setLoading(false)
+        }
       })
       .catch((e) => {
         console.error(e)
         setLoading(false)
       })
     loadComments(projectId)
-  }, [projectId, loadComments])
+  }, [projectId, isReady, loadComments])
 
   useEffect(() => {
-    if (!projectId || !selectedYear || accounts.length === 0) return
-    setLoading(true)
+    if (!projectId || !isReady || !selectedYear || accounts.length === 0) return
+
+    let cancelled = false
     const year = parseInt(selectedYear)
-    Promise.all([
-      getEntryItemsByDateRange(projectId, `${year}-01-01`, `${year}-12-31`),
-      getEntryItemsByDateRange(projectId, `${year - 1}-01-01`, `${year - 1}-12-31`),
-    ])
-      .then(([currentItems, prevItems]) => {
+    setLoading(true)
+    setAnalysisData(null)
+    setProgress(5)
+    setProgressLabel(`Buscando lançamentos do exercício ${year}...`)
+
+    const loadChunked = async () => {
+      try {
+        setProgress(10)
+        const currentItems = await getEntryItemsByDateRangeChunked(
+          projectId,
+          `${year}-01-01`,
+          `${year}-12-31`,
+          (loaded, total) => {
+            if (!cancelled) {
+              const pct = 10 + Math.round((loaded / Math.max(total, 1)) * 40)
+              setProgress(pct)
+              setProgressLabel(`Processando exercício ${year}... (${loaded}/${total} lançamentos)`)
+            }
+          },
+        )
+
+        if (cancelled) return
+
+        setProgress(55)
+        setProgressLabel(`Buscando lançamentos do exercício ${year - 1} (comparativo)...`)
+        const prevItems = await getEntryItemsByDateRangeChunked(
+          projectId,
+          `${year - 1}-01-01`,
+          `${year - 1}-12-31`,
+          (loaded, total) => {
+            if (!cancelled) {
+              const pct = 55 + Math.round((loaded / Math.max(total, 1)) * 35)
+              setProgress(pct)
+              setProgressLabel(
+                `Processando exercício ${year - 1}... (${loaded}/${total} lançamentos)`,
+              )
+            }
+          },
+        )
+
+        if (cancelled) return
+
+        setProgress(92)
+        setProgressLabel('Calculando análise vertical e horizontal...')
         const data = computeAnalysis(
           accounts,
           aggregateEntryItems(currentItems),
           aggregateEntryItems(prevItems),
         )
-        setAnalysisData(data)
-      })
-      .catch((e) => console.error(e))
-      .finally(() => setLoading(false))
-  }, [projectId, selectedYear, accounts])
+
+        if (!cancelled) {
+          setAnalysisData(data)
+          setProgress(100)
+        }
+      } catch (e) {
+        console.error(e)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    loadChunked()
+
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, isReady, selectedYear, accounts])
 
   useRealtime(
     'audit_comments',
@@ -82,10 +145,23 @@ export default function Analysis() {
     !!projectId,
   )
 
-  if (loading) {
+  if (!isReady) {
     return (
       <div className="flex items-center justify-center h-[50vh]">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center h-[50vh] gap-4 px-4">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        <div className="w-full max-w-md space-y-3">
+          <p className="text-sm text-muted-foreground text-center">{progressLabel}</p>
+          <Progress value={progress} className="h-2" />
+          <p className="text-xs text-muted-foreground text-center">{progress}%</p>
+        </div>
       </div>
     )
   }

@@ -386,3 +386,55 @@ export const getEntryItemsByDateRange = async (
     throw error
   }
 }
+
+export const getJournalEntryIdsByDateRange = async (
+  projectId: string,
+  startDate: string,
+  endDate: string,
+): Promise<string[]> => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    const entries = await safeCollection('journal_entries').getFullList({
+      filter: `project_id = "${projectId}" && date >= "${startDate}" && date <= "${endDate}"`,
+      fields: 'id',
+    })
+    return entries.map((e: any) => e.id)
+  } catch (error) {
+    console.error('Error in getJournalEntryIdsByDateRange:', error)
+    throw error
+  }
+}
+
+export const getEntryItemsByDateRangeChunked = async (
+  projectId: string,
+  startDate: string,
+  endDate: string,
+  onProgress?: (loaded: number, total: number) => void,
+): Promise<EntryItem[]> => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    const entryIds = await getJournalEntryIdsByDateRange(projectId, startDate, endDate)
+    const total = entryIds.length
+    if (total === 0) return []
+
+    const allItems: EntryItem[] = []
+    const chunkSize = 50
+    const client = getClient()
+
+    for (let i = 0; i < entryIds.length; i += chunkSize) {
+      const chunk = entryIds.slice(i, i + chunkSize)
+      const filter = chunk.map((id) => `entry_id="${id}"`).join('||')
+      const items = await client.collection('entry_items').getFullList<EntryItem>({
+        filter: `(${filter})`,
+        fields: 'id,account_id,type,value',
+      })
+      allItems.push(...items)
+      onProgress?.(Math.min(i + chunkSize, total), total)
+    }
+
+    return allItems
+  } catch (error) {
+    console.error('Error in getEntryItemsByDateRangeChunked:', error)
+    throw error
+  }
+}
