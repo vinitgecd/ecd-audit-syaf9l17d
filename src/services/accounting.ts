@@ -347,3 +347,42 @@ export const getAccountEntriesTotalCount = async (accountId: string, projectId: 
     return 0
   }
 }
+
+export const getFiscalYears = async (projectId: string): Promise<number[]> => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    const entries = await safeCollection('journal_entries').getFullList({
+      filter: `project_id = "${projectId}"`,
+      fields: 'date',
+      sort: '-date',
+    })
+    const years = new Set<number>()
+    entries.forEach((e: any) => {
+      if (e.date) {
+        const year = new Date(e.date + 'T00:00:00').getFullYear()
+        if (!isNaN(year)) years.add(year)
+      }
+    })
+    return Array.from(years).sort((a, b) => b - a)
+  } catch (error) {
+    console.error('Error in getFiscalYears:', error)
+    throw error
+  }
+}
+
+export const getEntryItemsByDateRange = async (
+  projectId: string,
+  startDate: string,
+  endDate: string,
+): Promise<EntryItem[]> => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    return await safeCollection('entry_items').getFullList<EntryItem>({
+      filter: `entry_id.project_id = "${projectId}" && entry_id.date >= "${startDate}" && entry_id.date <= "${endDate}"`,
+      fields: 'id,account_id,type,value',
+    })
+  } catch (error) {
+    console.error('Error in getEntryItemsByDateRange:', error)
+    throw error
+  }
+}

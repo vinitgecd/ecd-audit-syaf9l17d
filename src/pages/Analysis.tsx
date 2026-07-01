@@ -1,14 +1,6 @@
-import { useState, useEffect } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import {
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
-} from '@/components/ui/chart'
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis, Area, AreaChart } from 'recharts'
+import { useState, useEffect, useCallback } from 'react'
+import { useParams } from 'react-router-dom'
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -16,54 +8,71 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { AlertCircle, Loader2, RefreshCw, Trash2 } from 'lucide-react'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { AlertCircle, Loader2 } from 'lucide-react'
 import { getAuditCommentsByProject } from '@/services/audit_comments'
+import { getAccounts, getFiscalYears, getEntryItemsByDateRange } from '@/services/accounting'
+import type { Account } from '@/services/accounting'
 import { useRealtime } from '@/hooks/use-realtime'
-import useAccountingStore from '@/stores/useAccountingStore'
-import { Button } from '@/components/ui/button'
-import { Skeleton } from '@/components/ui/skeleton'
-
-const chartConfig = {
-  receitas: { label: 'Receitas', color: 'hsl(var(--chart-1))' },
-  despesas: { label: 'Despesas', color: 'hsl(var(--chart-2))' },
-  circulante: { label: 'Circulante', color: 'hsl(var(--chart-3))' },
-  naocirculante: { label: 'Não Circ.', color: 'hsl(var(--chart-4))' },
-}
+import { AnalysisTable } from '@/components/AnalysisTable'
+import { aggregateEntryItems, computeAnalysis, type AnalysisData } from '@/lib/analysis-utils'
 
 export default function Analysis() {
   const { projectId } = useParams()
-
-  const {
-    accounts,
-    loading: storeLoading,
-    isProcessing,
-    error: storeError,
-    loadData,
-    processedAnalysis,
-  } = useAccountingStore()
-
+  const [fiscalYears, setFiscalYears] = useState<number[]>([])
+  const [selectedYear, setSelectedYear] = useState('')
+  const [accounts, setAccounts] = useState<Account[]>([])
+  const [analysisData, setAnalysisData] = useState<AnalysisData | null>(null)
+  const [loading, setLoading] = useState(true)
   const [pendingCount, setPendingCount] = useState(0)
-  const [localLoading, setLocalLoading] = useState(true)
 
-  const loadComments = async (id: string) => {
+  const loadComments = useCallback(async (id: string) => {
     try {
       const comments = await getAuditCommentsByProject(id)
       setPendingCount(
-        comments.filter((c) => c.status === 'pending' || c.status === 'rejected').length,
+        comments.filter((c: any) => c.status === 'pending' || c.status === 'rejected').length,
       )
     } catch (e) {
       console.error(e)
-    } finally {
-      setLocalLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    if (projectId) {
-      loadData(projectId)
-      loadComments(projectId)
-    }
-  }, [projectId, loadData])
+    if (!projectId) return
+    setLoading(true)
+    Promise.all([getFiscalYears(projectId), getAccounts(projectId)])
+      .then(([years, accs]) => {
+        setFiscalYears(years)
+        setAccounts(accs)
+        if (years.length > 0) setSelectedYear(String(years[0]))
+        else setLoading(false)
+      })
+      .catch((e) => {
+        console.error(e)
+        setLoading(false)
+      })
+    loadComments(projectId)
+  }, [projectId, loadComments])
+
+  useEffect(() => {
+    if (!projectId || !selectedYear || accounts.length === 0) return
+    setLoading(true)
+    const year = parseInt(selectedYear)
+    Promise.all([
+      getEntryItemsByDateRange(projectId, `${year}-01-01`, `${year}-12-31`),
+      getEntryItemsByDateRange(projectId, `${year - 1}-01-01`, `${year - 1}-12-31`),
+    ])
+      .then(([currentItems, prevItems]) => {
+        const data = computeAnalysis(
+          accounts,
+          aggregateEntryItems(currentItems),
+          aggregateEntryItems(prevItems),
+        )
+        setAnalysisData(data)
+      })
+      .catch((e) => console.error(e))
+      .finally(() => setLoading(false))
+  }, [projectId, selectedYear, accounts])
 
   useRealtime(
     'audit_comments',
@@ -73,136 +82,10 @@ export default function Analysis() {
     !!projectId,
   )
 
-  const loading = storeLoading || isProcessing || localLoading
-  const error = storeError
-
-  const metrics = processedAnalysis || {
-    liquidezCorrente: '0.00',
-    endividamento: '0.0',
-    margemLiquida: '0.0',
-    monthlyData: [],
-    balanceData: [],
-  }
-
-  const navigate = useNavigate()
-  const isLoadingData = loading
-  const [showSlowWarning, setShowSlowWarning] = useState(false)
-  const [hasTimeout, setHasTimeout] = useState(false)
-
-  useEffect(() => {
-    let timer: NodeJS.Timeout
-    let timeoutTimer: NodeJS.Timeout
-
-    if (isLoadingData) {
-      setShowSlowWarning(false)
-      setHasTimeout(false)
-      timer = setTimeout(() => setShowSlowWarning(true), 2000)
-      timeoutTimer = setTimeout(() => setHasTimeout(true), 15000)
-    } else {
-      setShowSlowWarning(false)
-      setHasTimeout(false)
-    }
-    return () => {
-      clearTimeout(timer)
-      clearTimeout(timeoutTimer)
-    }
-  }, [isLoadingData])
-
-  if (hasTimeout) {
+  if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-[50vh] gap-4 text-center">
-        <AlertCircle className="h-10 w-10 text-destructive" />
-        <p className="text-lg font-medium text-foreground">
-          O carregamento da análise está demorando muito.
-        </p>
-        <p className="text-sm text-muted-foreground max-w-md">
-          Projetos grandes podem levar mais tempo para serem computados. Tente novamente ou vá para
-          as configurações se quiser limpar os dados.
-        </p>
-        <div className="flex gap-3 mt-4">
-          <Button variant="outline" onClick={() => projectId && loadData(projectId, true)}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Tentar Novamente
-          </Button>
-          <Button variant="destructive" onClick={() => navigate(`/projects/${projectId}/settings`)}>
-            <Trash2 className="mr-2 h-4 w-4" />
-            Resetar Projeto
-          </Button>
-        </div>
-      </div>
-    )
-  }
-
-  if (isLoadingData) {
-    return (
-      <div className="space-y-6 animate-pulse">
-        {showSlowWarning && (
-          <div className="bg-amber-50 text-amber-800 p-4 rounded-md border border-amber-200 flex items-center gap-3 mb-4 animate-in fade-in slide-in-from-top-2">
-            <Loader2 className="h-5 w-5 animate-spin" />
-            <div>
-              <p className="font-medium text-sm">
-                Processando arquivo grande, por favor aguarde... Isso pode levar alguns minutos
-                dependendo do tamanho da sua ECD
-              </p>
-            </div>
-          </div>
-        )}
-        <div className="flex justify-between items-center">
-          <div>
-            <Skeleton className="h-8 w-48 mb-2" />
-            <Skeleton className="h-4 w-64" />
-          </div>
-          <Skeleton className="h-10 w-[180px]" />
-        </div>
-        {accounts.length === 0 && !isLoadingData && !error ? (
-          <div className="bg-muted/50 border-2 border-dashed rounded-lg p-12 text-center flex flex-col items-center justify-center">
-            <p className="text-lg font-semibold text-foreground">Projeto sem dados contábeis</p>
-            <p className="text-muted-foreground mt-1 mb-4">
-              Importe um arquivo SPED ECD na seção "Importar" para visualizar os indicadores e
-              gráficos.
-            </p>
-          </div>
-        ) : (
-          <>
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Card key={i}>
-                  <CardHeader className="pb-2">
-                    <Skeleton className="h-4 w-24" />
-                  </CardHeader>
-                  <CardContent>
-                    <Skeleton className="h-8 w-20 mb-1" />
-                    <Skeleton className="h-3 w-32" />
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-            <div className="grid gap-6 md:grid-cols-2">
-              <Card>
-                <CardContent className="h-[300px] flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="h-[300px] flex items-center justify-center">
-                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                </CardContent>
-              </Card>
-            </div>
-          </>
-        )}
-      </div>
-    )
-  }
-
-  if (error) {
-    return (
-      <div className="flex flex-col items-center justify-center h-[50vh] gap-4">
-        <p className="text-destructive font-medium">Erro ao carregar dados contábeis.</p>
-        <Button variant="outline" onClick={() => projectId && loadData(projectId, true)}>
-          <RefreshCw className="mr-2 h-4 w-4" />
-          Tentar Novamente
-        </Button>
+      <div className="flex items-center justify-center h-[50vh]">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     )
   }
@@ -213,177 +96,85 @@ export default function Analysis() {
         <div>
           <h2 className="text-2xl font-semibold tracking-tight">Análise Contábil</h2>
           <p className="text-muted-foreground mt-1">
-            Visão detalhada e indicadores computados dos dados importados.
+            Análise Vertical (AV) e Horizontal (AH) dos dados importados.
           </p>
         </div>
-        <Select defaultValue="2023">
+        <Select value={selectedYear} onValueChange={setSelectedYear}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Ano Exercício" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="2023">Exercício 2023</SelectItem>
-            <SelectItem value="2022">Exercício 2022</SelectItem>
+            {fiscalYears.map((y) => (
+              <SelectItem key={y} value={String(y)}>
+                Exercício {y}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {fiscalYears.length === 0 ? (
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Índice de Liquidez Corrente
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{metrics.liquidezCorrente}</div>
-            <p className="text-xs text-muted-foreground mt-1">Capacidade de pagamento</p>
+          <CardContent className="py-12 text-center text-muted-foreground">
+            Nenhum lançamento encontrado. Importe um arquivo SPED ECD para visualizar a análise.
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Grau de Endividamento
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{metrics.endividamento}%</div>
-            <p className="text-xs text-muted-foreground mt-1">Capital de terceiros</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Inconsistências (Alertas)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-amber-500">{pendingCount}</div>
-            <p className="text-xs text-muted-foreground mt-1">Comentários de auditoria pendentes</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Margem Líquida
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-primary">{metrics.margemLiquida}%</div>
-            <p className="text-xs text-muted-foreground mt-1">Rentabilidade sobre vendas</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Demonstração de Resultado</CardTitle>
-            <CardDescription>Evolução de receitas vs despesas</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ChartContainer config={chartConfig}>
-                <AreaChart
-                  data={metrics.monthlyData}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Area
-                    type="monotone"
-                    dataKey="receitas"
-                    stroke="var(--color-receitas)"
-                    fill="var(--color-receitas)"
-                    fillOpacity={0.2}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="despesas"
-                    stroke="var(--color-despesas)"
-                    fill="var(--color-despesas)"
-                    fillOpacity={0.2}
-                  />
-                </AreaChart>
-              </ChartContainer>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Composição Patrimonial</CardTitle>
-            <CardDescription>Estrutura do Ativo e Passivo</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-[300px]">
-              <ChartContainer config={chartConfig}>
-                <BarChart
-                  data={metrics.balanceData}
-                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                  <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} />
-                  <YAxis
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                  />
-                  <ChartTooltip content={<ChartTooltipContent />} />
-                  <ChartLegend content={<ChartLegendContent />} />
-                  <Bar
-                    dataKey="circulante"
-                    stackId="a"
-                    fill="var(--color-circulante)"
-                    radius={[0, 0, 4, 4]}
-                  />
-                  <Bar
-                    dataKey="naocirculante"
-                    stackId="a"
-                    fill="var(--color-naocirculante)"
-                    radius={[4, 4, 0, 0]}
-                  />
-                </BarChart>
-              </ChartContainer>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      ) : analysisData ? (
+        <Tabs defaultValue="bp">
+          <TabsList>
+            <TabsTrigger value="bp">Balanço Patrimonial</TabsTrigger>
+            <TabsTrigger value="dre">DRE</TabsTrigger>
+          </TabsList>
+          <TabsContent value="bp" className="mt-4">
+            <AnalysisTable
+              title="Balanço Patrimonial (BP)"
+              description={`Análise Vertical e Horizontal — Exercício ${selectedYear}`}
+              rows={analysisData.bpRows}
+              totals={[
+                { label: 'Total Ativo', value: analysisData.totalAssets },
+                { label: 'Total Passivo + PL', value: analysisData.totalLiabilitiesEquity },
+              ]}
+              emptyMessage="Nenhum dado de balanço patrimonial encontrado para o período selecionado."
+            />
+          </TabsContent>
+          <TabsContent value="dre" className="mt-4">
+            <AnalysisTable
+              title="Demonstração do Resultado (DRE)"
+              description={`Análise Vertical e Horizontal — Exercício ${selectedYear}`}
+              rows={analysisData.dreRows}
+              totals={[{ label: 'Total Receitas', value: analysisData.totalRevenue }]}
+              emptyMessage="Nenhum dado de DRE encontrado para o período selecionado."
+            />
+          </TabsContent>
+        </Tabs>
+      ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>Alertas de Auditoria Gerados</CardTitle>
+          <CardTitle>Alertas de Auditoria</CardTitle>
           <CardDescription>
             Cruzamentos automatizados baseados no SPED e regras contábeis
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
-            {pendingCount > 0 ? (
-              <div className="flex items-start gap-4 p-4 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
-                <div className="p-2 rounded-full bg-amber-100 text-amber-600">
-                  <AlertCircle className="h-5 w-5" />
-                </div>
-                <div>
-                  <h4 className="font-medium">Pendências de Auditoria Encontradas</h4>
-                  <p className="text-sm text-muted-foreground mt-1">
-                    Existem {pendingCount} lançamentos com comentários pendentes ou reprovados.
-                    Verifique o relatório de pendências para ação.
-                  </p>
-                </div>
+          {pendingCount > 0 ? (
+            <div className="flex items-start gap-4 p-4 border rounded-lg bg-card hover:bg-muted/50 transition-colors">
+              <div className="p-2 rounded-full bg-amber-100 text-amber-600">
+                <AlertCircle className="h-5 w-5" />
               </div>
-            ) : (
-              <div className="text-center py-6 text-muted-foreground border border-dashed rounded-lg">
-                Nenhum alerta crítico encontrado nos dados analisados no momento.
+              <div>
+                <h4 className="font-medium">Pendências de Auditoria Encontradas</h4>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Existem {pendingCount} lançamentos com comentários pendentes ou reprovados.
+                  Verifique o relatório de pendências para ação.
+                </p>
               </div>
-            )}
-          </div>
+            </div>
+          ) : (
+            <div className="text-center py-6 text-muted-foreground border border-dashed rounded-lg">
+              Nenhum alerta crítico encontrado nos dados analisados no momento.
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>
