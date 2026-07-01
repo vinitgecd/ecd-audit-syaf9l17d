@@ -53,7 +53,6 @@ export default function Layout() {
     ? [
         { title: 'Importar', url: `/projects/${projectId}/import`, icon: Upload },
         { title: 'Balancete', url: `/projects/${projectId}/balancete`, icon: BookOpen },
-        { title: 'Análise Contábil', url: `/projects/${projectId}/analysis`, icon: BarChart2 },
         { title: 'Documentos Fiscais', url: `/projects/${projectId}/documents`, icon: FileText },
         { title: 'Pendências', url: `/projects/${projectId}/pending`, icon: AlertCircle },
         { title: 'Configurações', url: `/projects/${projectId}/settings`, icon: Settings },

@@ -12,7 +12,6 @@ import Register from './pages/auth/Register'
 import Index from './pages/Index'
 import Projects from './pages/Projects'
 import Import from './pages/Import'
-import Analysis from './pages/Analysis'
 import Balancete from './pages/Balancete'
 import Documents from './pages/Documents'
 import Razao from './pages/Razao'
@@ -36,7 +35,6 @@ const App = () => (
                 <Route path="/dashboard" element={<Index />} />
                 <Route path="/projects" element={<Projects />} />
                 <Route path="/projects/:projectId/import" element={<Import />} />
-                <Route path="/projects/:projectId/analysis" element={<Analysis />} />
                 <Route path="/projects/:projectId/balancete" element={<Balancete />} />
                 <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
                 <Route path="/projects/:projectId/documents" element={<Documents />} />
