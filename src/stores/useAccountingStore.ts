@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react'
+import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react'
 import {
   Account,
   EntryItem,
@@ -107,7 +107,6 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   const [isProcessing, setIsProcessing] = useState(false)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState<Error | null>(null)
-  const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
 
   const resetProject = useCallback(async (id: string) => {
     try {
@@ -130,49 +129,54 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true)
     setError(null)
 
-    const timeoutPromise = new Promise((_, reject) => {
-      fetchTimeoutRef.current = setTimeout(() => {
-        reject(new Error('TIMEOUT'))
-      }, 20000)
-    })
+    const MAX_RETRIES = 3
+    let lastError: Error | null = null
 
-    try {
-      let fetchPromise
-      if (search) {
-        fetchPromise = getAccountBalancesByIds(id, search).then((res) => res.items)
-      } else {
-        fetchPromise = getRootAccountBalances(id)
-      }
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      try {
+        let balances: AccountBalance[]
 
-      const balances = (await Promise.race([fetchPromise, timeoutPromise])) as AccountBalance[]
-
-      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current)
-
-      setProjectId(id)
-      setIsProcessing(true)
-
-      setTimeout(() => {
-        try {
-          const balancete = processBalancete(balances)
-          setProcessedBalancete(balancete)
-          setExpandedGroups({})
-          setLoadedChildren({})
-          setHasLoaded(true)
-        } catch (err) {
-          console.error('Processing error', err)
-          setError(err instanceof Error ? err : new Error('Failed to process data'))
-        } finally {
-          setIsProcessing(false)
-          setLoading(false)
+        if (search) {
+          const res = await getAccountBalancesByIds(id, search)
+          balances = res.items
+        } else {
+          const res = await getRootAccountBalances(id)
+          balances = res.items
         }
-      }, 10)
-    } catch (e: any) {
-      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current)
-      console.error(e)
-      setError(e instanceof Error ? e : new Error(e.message || 'Failed to load balancete data'))
-      setLoading(false)
-      setIsProcessing(false)
+
+        setProjectId(id)
+        setIsProcessing(true)
+
+        setTimeout(() => {
+          try {
+            const balancete = processBalancete(balances)
+            setProcessedBalancete(balancete)
+            setExpandedGroups({})
+            setLoadedChildren({})
+            setHasLoaded(true)
+          } catch (err) {
+            console.error('Processing error', err)
+            setError(err instanceof Error ? err : new Error('Failed to process data'))
+          } finally {
+            setIsProcessing(false)
+            setLoading(false)
+          }
+        }, 10)
+
+        return
+      } catch (e: any) {
+        lastError = e instanceof Error ? e : new Error(e.message || 'Failed to load balancete data')
+        console.error(`Attempt ${attempt + 1}/${MAX_RETRIES} failed:`, e)
+
+        if (attempt < MAX_RETRIES - 1) {
+          await new Promise((resolve) => setTimeout(resolve, 1000 * (attempt + 1)))
+        }
+      }
     }
+
+    setError(lastError || new Error('Failed to load balancete data after multiple attempts'))
+    setLoading(false)
+    setIsProcessing(false)
   }, [])
 
   const loadChildren = useCallback(
