@@ -3,6 +3,7 @@ import { Toaster } from '@/components/ui/toaster'
 import { Toaster as Sonner } from '@/components/ui/sonner'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import Layout from './components/Layout'
+import { ProtectedRoute } from './components/ProtectedRoute'
 import { AuthProvider } from './hooks/use-auth'
 import { AccountingProvider } from './stores/useAccountingStore'
 import { DatabaseProvider } from './contexts/DatabaseContext'
@@ -30,15 +31,17 @@ const App = () => (
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<Register />} />
-              <Route element={<Layout />}>
-                <Route path="/" element={<Navigate to="/dashboard" replace />} />
-                <Route path="/dashboard" element={<Index />} />
-                <Route path="/projects" element={<Projects />} />
-                <Route path="/projects/:projectId/import" element={<Import />} />
-                <Route path="/projects/:projectId/balancete" element={<Balancete />} />
-                <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
-                <Route path="/projects/:projectId/pending" element={<Pending />} />
-                <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
+              <Route element={<ProtectedRoute />}>
+                <Route element={<Layout />}>
+                  <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                  <Route path="/dashboard" element={<Index />} />
+                  <Route path="/projects" element={<Projects />} />
+                  <Route path="/projects/:projectId/import" element={<Import />} />
+                  <Route path="/projects/:projectId/balancete" element={<Balancete />} />
+                  <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
+                  <Route path="/projects/:projectId/pending" element={<Pending />} />
+                  <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
+                </Route>
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

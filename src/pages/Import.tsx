@@ -86,6 +86,15 @@ export default function Import() {
             }, 1500)
           } catch (error: any) {
             console.error(error)
+            if (error?.status === 401) {
+              toast({
+                variant: 'destructive',
+                title: 'Sessão expirada',
+                description: 'Sua sessão expirou. Faça login novamente.',
+              })
+              setTimeout(() => navigate('/login'), 1500)
+              return
+            }
             toast({
               variant: 'destructive',
               title: 'Erro na importação',

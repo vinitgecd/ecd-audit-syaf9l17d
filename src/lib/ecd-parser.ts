@@ -6,6 +6,15 @@ export async function parseAndImportEcd(
   pb: PocketBase,
   onProgress: (p: number) => void,
 ) {
+  if (!pb.authStore.isValid) {
+    throw new Error('Sua sessão expirou. Faça login novamente para continuar.')
+  }
+
+  const headers = {
+    'Content-Type': 'application/json',
+    Authorization: pb.authStore.token || '',
+  }
+
   onProgress(5)
   const text = await file.text()
   onProgress(10)
@@ -88,6 +97,7 @@ export async function parseAndImportEcd(
 
   await pb.send(`/backend/v1/projects/${projectId}/import/ecd`, {
     method: 'POST',
+    headers,
     body: JSON.stringify({ action: 'clear' }),
   })
 
@@ -95,6 +105,7 @@ export async function parseAndImportEcd(
 
   const accRes = await pb.send(`/backend/v1/projects/${projectId}/import/ecd`, {
     method: 'POST',
+    headers,
     body: JSON.stringify({ action: 'accounts', accounts }),
   })
 
@@ -119,6 +130,7 @@ export async function parseAndImportEcd(
     const batch = validEntries.slice(i, i + BATCH_SIZE)
     await pb.send(`/backend/v1/projects/${projectId}/import/ecd`, {
       method: 'POST',
+      headers,
       body: JSON.stringify({ action: 'entries', entries: batch }),
     })
     totalProcessed += batch.length
