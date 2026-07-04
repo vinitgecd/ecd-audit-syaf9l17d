@@ -50,8 +50,23 @@ routerAdd(
     if (action === 'accounts') {
       var accounts = Array.isArray(parsed) ? parsed : []
       var codeToId = {}
+      var accErrors = []
 
       for (var a = 0; a < accounts.length; a++) {
+        if (!accounts[a].code) {
+          accErrors.push({
+            lineNumber: accounts[a]._lineNumber || 0,
+            error: 'Codigo de conta ausente',
+          })
+          continue
+        }
+        if (!accounts[a].name) {
+          accErrors.push({
+            lineNumber: accounts[a]._lineNumber || 0,
+            error: 'Nome da conta ausente para o codigo: ' + accounts[a].code,
+          })
+          continue
+        }
         codeToId[accounts[a].code] = $security.randomString(15)
       }
 
@@ -120,6 +135,7 @@ routerAdd(
         success: true,
         recordsProcessed: accounts.length,
         codeToId: codeToId,
+        errors: accErrors,
       })
     }
 
@@ -127,6 +143,7 @@ routerAdd(
       var entries = Array.isArray(parsed) ? parsed : []
       var insertedEntries = 0
       var insertedItems = 0
+      var chunkErrors = []
 
       $app.runInTransaction(function (txApp) {
         var now = new Date().toISOString().replace('T', ' ')
@@ -135,7 +152,48 @@ routerAdd(
 
         for (var i = 0; i < entries.length; i++) {
           var entry = entries[i]
-          if (!entry.items || entry.items.length === 0) continue
+          var entryLineNum = entry._lineNumber || 0
+          if (!entry.items || entry.items.length === 0) {
+            chunkErrors.push({
+              lineNumber: entryLineNum,
+              error: 'Lancamento sem partidas (debito/credito)',
+            })
+            continue
+          }
+          if (!entry.date) {
+            chunkErrors.push({
+              lineNumber: entryLineNum,
+              error: 'Data do lancamento invalida ou ausente',
+            })
+            continue
+          }
+          var hasValidItems = false
+          for (var vi = 0; vi < entry.items.length; vi++) {
+            var vItem = entry.items[vi]
+            if (!vItem.account_id) {
+              chunkErrors.push({
+                lineNumber: entryLineNum,
+                error: 'Conta contabil nao encontrada para a partida',
+              })
+              continue
+            }
+            if (!vItem.type || (vItem.type !== 'debit' && vItem.type !== 'credit')) {
+              chunkErrors.push({
+                lineNumber: entryLineNum,
+                error: 'Tipo de partida invalido (deve ser debito ou credito)',
+              })
+              continue
+            }
+            if (isNaN(vItem.value) || vItem.value === 0) {
+              chunkErrors.push({
+                lineNumber: entryLineNum,
+                error: 'Valor da partida invalido ou zero',
+              })
+              continue
+            }
+            hasValidItems = true
+          }
+          if (!hasValidItems) continue
           var entryId = $security.randomString(15)
           entryRows.push({
             id: entryId,
@@ -256,6 +314,7 @@ routerAdd(
         recordsProcessed: insertedEntries + insertedItems,
         entries: insertedEntries,
         items: insertedItems,
+        errors: chunkErrors,
       })
     }
 

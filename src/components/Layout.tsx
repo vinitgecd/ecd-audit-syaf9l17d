@@ -32,6 +32,7 @@ import {
   LogOut,
   BookOpen,
   AlertCircle,
+  Scale,
 } from 'lucide-react'
 
 export default function Layout() {
@@ -52,6 +53,11 @@ export default function Layout() {
     ? [
         { title: 'Importar', url: `/projects/${projectId}/import`, icon: Upload },
         { title: 'Balancete', url: `/projects/${projectId}/balancete`, icon: BookOpen },
+        {
+          title: 'Presunções Legais',
+          url: `/projects/${projectId}/presuncoes-legais`,
+          icon: Scale,
+        },
         { title: 'Pendências', url: `/projects/${projectId}/pending`, icon: AlertCircle },
         { title: 'Configurações', url: `/projects/${projectId}/settings`, icon: Settings },
       ]

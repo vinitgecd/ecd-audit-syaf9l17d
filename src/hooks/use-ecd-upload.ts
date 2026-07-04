@@ -2,6 +2,7 @@ import { useState, useCallback, useRef } from 'react'
 import pb from '@/lib/pocketbase/client'
 import { parseAndImportEcd } from '@/lib/ecd-parser'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
+import { downloadErrorLog, type FailedLine } from '@/lib/error-log'
 
 export type UploadStatus = 'idle' | 'uploading' | 'completed' | 'error'
 
@@ -35,6 +36,7 @@ export function useEcdUpload(projectId: string | undefined) {
   const [isValidating, setIsValidating] = useState(false)
   const [validationError, setValidationError] = useState<string | null>(null)
   const [validationPassed, setValidationPassed] = useState(false)
+  const [failedLines, setFailedLines] = useState<FailedLine[]>([])
   const cancelledRef = useRef(false)
 
   const selectFile = useCallback(async (selectedFile: File) => {
@@ -46,6 +48,7 @@ export function useEcdUpload(projectId: string | undefined) {
       setMessage('Apenas arquivos .txt são permitidos para importação ECD.')
       setValidationError(null)
       setValidationPassed(false)
+      setFailedLines([])
       return
     }
     if (selectedFile.size > MAX_FILE_SIZE) {
@@ -54,6 +57,7 @@ export function useEcdUpload(projectId: string | undefined) {
       setMessage('O arquivo excede o limite máximo de 100MB.')
       setValidationError(null)
       setValidationPassed(false)
+      setFailedLines([])
       return
     }
 
@@ -67,6 +71,7 @@ export function useEcdUpload(projectId: string | undefined) {
     setEstimatedTime('')
     setValidationError(null)
     setValidationPassed(false)
+    setFailedLines([])
     setIsValidating(true)
 
     try {
@@ -95,6 +100,7 @@ export function useEcdUpload(projectId: string | undefined) {
     setStatus('uploading')
     setProgress(0)
     setMessage('Iniciando processamento...')
+    setFailedLines([])
 
     try {
       const result = await parseAndImportEcd(file, projectId, pb, (p) => {
@@ -108,13 +114,21 @@ export function useEcdUpload(projectId: string | undefined) {
       setStatus('completed')
       setTotalRecords(result.entriesCount)
       setUploadedRecords(result.entriesCount)
-      setMessage(
-        `${result.accountsCount} contas e ${result.entriesCount} lançamentos importados com sucesso.`,
-      )
+      setFailedLines(result.failedLines || [])
+      if (result.failedLines && result.failedLines.length > 0) {
+        setMessage(
+          `${result.accountsCount} contas e ${result.entriesCount} lançamentos importados. ${result.failedLines.length} linha(s) com erro(s) — baixe o log para detalhes.`,
+        )
+      } else {
+        setMessage(
+          `${result.accountsCount} contas e ${result.entriesCount} lançamentos importados com sucesso.`,
+        )
+      }
     } catch (error) {
       if (cancelledRef.current) return
       setStatus('error')
       setMessage(getErrorMessage(error))
+      setFailedLines((prev) => [...prev, { lineNumber: 0, error: getErrorMessage(error) }])
     }
   }, [file, projectId, status, validationPassed])
 
@@ -123,6 +137,7 @@ export function useEcdUpload(projectId: string | undefined) {
     setStatus('idle')
     setProgress(0)
     setMessage('Upload cancelado.')
+    setFailedLines([])
   }, [])
 
   const resetUpload = useCallback(() => {
@@ -137,7 +152,14 @@ export function useEcdUpload(projectId: string | undefined) {
     setIsValidating(false)
     setValidationError(null)
     setValidationPassed(false)
+    setFailedLines([])
   }, [])
+
+  const downloadErrorLogFile = useCallback(() => {
+    if (failedLines.length > 0) {
+      downloadErrorLog(failedLines)
+    }
+  }, [failedLines])
 
   return {
     file,
@@ -150,9 +172,11 @@ export function useEcdUpload(projectId: string | undefined) {
     isValidating,
     validationError,
     validationPassed,
+    failedLines,
     selectFile,
     startUpload,
     cancelUpload,
     resetUpload,
+    downloadErrorLogFile,
   }
 }

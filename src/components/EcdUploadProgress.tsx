@@ -2,9 +2,14 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { CheckCircle, XCircle, Loader2, Upload, X } from 'lucide-react'
+import { CheckCircle, XCircle, Loader2, Upload, X, Download } from 'lucide-react'
 
 type UploadStatus = 'idle' | 'processing' | 'uploading' | 'success' | 'error'
+
+interface FailedLine {
+  lineNumber: number
+  error: string
+}
 
 interface EcdUploadProgressProps {
   progress: number
@@ -14,6 +19,8 @@ interface EcdUploadProgressProps {
   totalRecords: number
   estimatedTime: string
   onCancel: () => void
+  failedLines?: FailedLine[]
+  onDownloadErrorLog?: () => void
 }
 
 const statusConfig: Record<
@@ -71,10 +78,14 @@ export function EcdUploadProgress({
   totalRecords,
   estimatedTime,
   onCancel,
+  failedLines,
+  onDownloadErrorLog,
 }: EcdUploadProgressProps) {
   const config = statusConfig[status]
   const Icon = config.icon
   const isActive = status === 'processing' || status === 'uploading'
+  const hasErrors =
+    (status === 'error' || (failedLines != null && failedLines.length > 0)) && !!onDownloadErrorLog
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -114,6 +125,13 @@ export function EcdUploadProgress({
 
       {isActive && estimatedTime && (
         <p className="text-sm text-muted-foreground">Tempo estimado: {estimatedTime}</p>
+      )}
+
+      {hasErrors && (
+        <Button variant="outline" size="sm" onClick={onDownloadErrorLog}>
+          <Download className="mr-1 h-3 w-3" />
+          Baixar Log de Erros
+        </Button>
       )}
 
       {message && (

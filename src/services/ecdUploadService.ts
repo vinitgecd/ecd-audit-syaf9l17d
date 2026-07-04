@@ -6,6 +6,7 @@ export interface UploadChunkResponse {
   codeToId?: Record<string, string>
   entries?: number
   items?: number
+  errors?: Array<{ lineNumber: number; error: string }>
 }
 
 export async function uploadChunk(

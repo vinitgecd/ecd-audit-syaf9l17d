@@ -15,6 +15,7 @@ import Importar from '@/pages/Importar'
 import Balancete from './pages/Balancete'
 
 import Razao from './pages/Razao'
+import PresuncoesLegais from './pages/PresuncoesLegais'
 import Pending from './pages/Pending'
 import ProjectSettings from './pages/ProjectSettings'
 import NotFound from './pages/NotFound'
@@ -37,6 +38,10 @@ const App = () => (
                 <Route path="/projects/:projectId/import" element={<Importar />} />
                 <Route path="/projects/:projectId/balancete" element={<Balancete />} />
                 <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
+                <Route
+                  path="/projects/:projectId/presuncoes-legais"
+                  element={<PresuncoesLegais />}
+                />
                 <Route path="/projects/:projectId/pending" element={<Pending />} />
                 <Route path="/projects/:projectId/settings" element={<ProjectSettings />} />
               </Route>
