@@ -1,22 +1,27 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
-import { UploadCloud, FileType2, RefreshCw } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
+import { UploadCloud, FileType2, Loader2, CheckCircle2, AlertCircle, X } from 'lucide-react'
 import { useEcdUpload } from '@/hooks/use-ecd-upload'
-import { EcdUploadProgress } from '@/components/EcdUploadProgress'
 import { useToast } from '@/hooks/use-toast'
 import { cn } from '@/lib/utils'
+
+const tabConfigs = [
+  { id: 'ecd', label: 'Upload ECD' },
+  { id: 'bank', label: 'Extratos Bancários' },
+  { id: 'invoices', label: 'Notas Fiscais' },
+] as const
 
 export default function Importar() {
   const { projectId } = useParams()
   const navigate = useNavigate()
   const { toast } = useToast()
-  const [observations, setObservations] = useState('')
-  const successHandled = useRef(false)
-
   const {
     file,
     progress,
@@ -29,62 +34,92 @@ export default function Importar() {
     startUpload,
     cancelUpload,
     resetUpload,
-    retry,
-  } = useEcdUpload()
+  } = useEcdUpload(projectId)
+
+  const [dragState, setDragState] = useState(false)
+  const [observations, setObservations] = useState('')
 
   useEffect(() => {
-    if (status === 'success' && !successHandled.current) {
-      successHandled.current = true
-      toast({
-        title: 'Sucesso',
-        description: `Arquivo processado com sucesso! ${uploadedRecords} registros importados.`,
-      })
+    if (status === 'completed') {
+      toast({ title: 'Sucesso', description: message })
       const timer = setTimeout(() => {
-        navigate(`/projects/${projectId}/balancete`)
-      }, 2000)
+        if (projectId) navigate(`/projects/${projectId}/balancete`)
+      }, 1500)
       return () => clearTimeout(timer)
     }
-    if (status !== 'success') {
-      successHandled.current = false
+    if (status === 'error') {
+      toast({ variant: 'destructive', title: 'Erro na importação', description: message })
     }
-  }, [status, uploadedRecords, navigate, projectId, toast])
+  }, [status, message, projectId, navigate, toast])
 
-  const handleProcess = async () => {
-    if (!projectId || !file) return
-    await startUpload(projectId)
+  const handleDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault()
+      setDragState(false)
+      const dropped = e.dataTransfer.files?.[0]
+      if (dropped) selectFile(dropped)
+    },
+    [selectFile],
+  )
+
+  const statusBadge = () => {
+    if (status === 'completed') return <Badge className="text-sm py-1 px-3">Validado</Badge>
+    if (status === 'uploading')
+      return (
+        <Badge variant="secondary" className="text-sm py-1 px-3">
+          Em processamento
+        </Badge>
+      )
+    if (status === 'error')
+      return (
+        <Badge variant="destructive" className="text-sm py-1 px-3">
+          Erro
+        </Badge>
+      )
+    return (
+      <Badge variant="outline" className="text-sm py-1 px-3">
+        Aguardando
+      </Badge>
+    )
   }
-
-  const handleCancel = () => {
-    if (window.confirm('Cancelar upload?')) {
-      cancelUpload()
-    }
-  }
-
-  const isActive = status === 'processing' || status === 'uploading'
-  const showFileInput = !isActive && status !== 'success'
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h2 className="text-2xl font-semibold tracking-tight">Importar ECD</h2>
+        <h2 className="text-2xl font-semibold tracking-tight">Importar Dados</h2>
         <p className="text-muted-foreground mt-1">
-          Faça o upload do arquivo SPED ECD para processamento automático.
+          Faça o upload e validação de seus arquivos em categorias específicas.
         </p>
       </div>
 
-      <Card>
-        <CardContent className="p-6 space-y-6">
-          {showFileInput && (
-            <>
+      <Tabs defaultValue="ecd" className="w-full">
+        <TabsList className="grid w-full grid-cols-3">
+          {tabConfigs.map((t) => (
+            <TabsTrigger key={t.id} value={t.id}>
+              {t.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        <TabsContent value="ecd" className="mt-6">
+          <Card>
+            <CardContent className="p-6 space-y-6">
               <div
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={(e) => {
+                onDragOver={(e) => {
                   e.preventDefault()
-                  if (e.dataTransfer.files?.[0]) selectFile(e.dataTransfer.files[0])
+                  setDragState(true)
                 }}
+                onDragLeave={(e) => {
+                  e.preventDefault()
+                  setDragState(false)
+                }}
+                onDrop={handleDrop}
                 className={cn(
                   'border-2 border-dashed rounded-xl p-8 flex flex-col items-center justify-center text-center transition-colors',
-                  file ? 'border-primary/50 bg-primary/5' : 'border-border hover:border-primary/50',
+                  dragState
+                    ? 'border-primary bg-primary/5'
+                    : 'border-border hover:border-primary/50',
+                  file && 'border-primary/50 bg-primary/5',
                 )}
               >
                 {file ? (
@@ -98,9 +133,11 @@ export default function Importar() {
                         {(file.size / 1024 / 1024).toFixed(2)} MB
                       </p>
                     </div>
-                    <Button variant="outline" size="sm" onClick={resetUpload}>
-                      Trocar arquivo
-                    </Button>
+                    {status === 'idle' && (
+                      <Button variant="outline" size="sm" onClick={resetUpload}>
+                        <X className="mr-2 h-4 w-4" /> Remover
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -116,7 +153,11 @@ export default function Importar() {
                         type="file"
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                         accept=".txt"
-                        onChange={(e) => e.target.files?.[0] && selectFile(e.target.files[0])}
+                        onChange={(e) => {
+                          const f = e.target.files?.[0]
+                          if (f) selectFile(f)
+                          e.target.value = ''
+                        }}
                       />
                       <Button variant="secondary">Procurar Arquivo</Button>
                     </div>
@@ -124,66 +165,109 @@ export default function Importar() {
                 )}
               </div>
 
-              {file && status === 'error' && (
-                <div className="space-y-4 animate-fade-in">
-                  <p className="text-sm text-red-500 font-medium">{message}</p>
-                  <Button variant="outline" onClick={retry}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Tentar novamente
-                  </Button>
+              {message && (
+                <div
+                  className={cn(
+                    'flex items-center gap-2 rounded-lg p-3 text-sm animate-fade-in',
+                    status === 'error'
+                      ? 'bg-destructive/10 text-destructive'
+                      : status === 'completed'
+                        ? 'bg-green-500/10 text-green-600 dark:text-green-400'
+                        : 'bg-muted text-muted-foreground',
+                  )}
+                >
+                  {status === 'error' ? (
+                    <AlertCircle className="h-4 w-4 shrink-0" />
+                  ) : status === 'completed' ? (
+                    <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  ) : null}
+                  <span>{message}</span>
                 </div>
               )}
 
-              {!file && status === 'error' && message && (
-                <p className="text-sm text-red-500 font-medium text-center">{message}</p>
+              {status === 'uploading' && (
+                <div className="space-y-2 animate-fade-in">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">Processando arquivo...</span>
+                    <span className="font-medium">{progress}%</span>
+                  </div>
+                  <Progress value={progress} className="h-2" />
+                  {(totalRecords > 0 || uploadedRecords > 0) && (
+                    <p className="text-xs text-muted-foreground">
+                      {uploadedRecords} / {totalRecords} registros
+                      {estimatedTime ? ` · ${estimatedTime}` : ''}
+                    </p>
+                  )}
+                </div>
               )}
 
-              {file && status === 'idle' && (
-                <div className="space-y-6 border-t pt-6">
+              {file && (
+                <div className="grid sm:grid-cols-2 gap-6 border-t pt-6">
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium text-muted-foreground">
+                      Validação Automática
+                    </div>
+                    {statusBadge()}
+                  </div>
                   <div className="space-y-3">
                     <div className="text-sm font-medium text-muted-foreground">Observações</div>
                     <Textarea
                       placeholder="Adicione notas sobre a importação..."
                       value={observations}
                       onChange={(e) => setObservations(e.target.value)}
+                      disabled={status === 'uploading'}
                       className="resize-none h-24"
                     />
                   </div>
-                  <div className="flex justify-end">
-                    <Button onClick={handleProcess} disabled={!file}>
-                      Processar
-                    </Button>
-                  </div>
                 </div>
               )}
-            </>
-          )}
 
-          {isActive && (
-            <EcdUploadProgress
-              progress={progress}
-              status={status}
-              message={message}
-              uploadedRecords={uploadedRecords}
-              totalRecords={totalRecords}
-              estimatedTime={estimatedTime}
-              onCancel={handleCancel}
-            />
-          )}
+              {file && (
+                <div className="flex justify-between pt-4 border-t">
+                  {status === 'uploading' ? (
+                    <Button variant="outline" onClick={cancelUpload}>
+                      Cancelar
+                    </Button>
+                  ) : (
+                    <div />
+                  )}
+                  {status === 'uploading' ? (
+                    <Button disabled>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Processando...
+                    </Button>
+                  ) : status === 'completed' ? (
+                    <Button disabled>Processado</Button>
+                  ) : (
+                    <Button onClick={startUpload} disabled={status === 'error'}>
+                      Processar
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-          {status === 'success' && (
-            <EcdUploadProgress
-              progress={progress}
-              status={status}
-              message={message}
-              uploadedRecords={uploadedRecords}
-              totalRecords={totalRecords}
-              estimatedTime={estimatedTime}
-              onCancel={() => {}}
-            />
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="bank" className="mt-6">
+          <Card>
+            <CardContent className="p-6">
+              <p className="text-muted-foreground text-center py-8">
+                Upload de extratos bancários em breve.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="invoices" className="mt-6">
+          <Card>
+            <CardContent className="p-6">
+              <p className="text-muted-foreground text-center py-8">
+                Upload de notas fiscais em breve.
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }
