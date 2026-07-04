@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
 import pb from '@/lib/pocketbase/client'
@@ -22,7 +22,6 @@ interface TabState {
   status: FileStatus
   progress: number
   observations: string
-  statusMessage: string
 }
 
 const tabConfigs: { id: TabKey; label: string }[] = [
@@ -37,9 +36,9 @@ export default function Import() {
   const { toast } = useToast()
   const [dragState, setDragState] = useState<string | null>(null)
   const [tabs, setTabs] = useState<Record<TabKey, TabState>>({
-    ecd: { file: null, status: 'idle', progress: 0, observations: '', statusMessage: '' },
-    bank: { file: null, status: 'idle', progress: 0, observations: '', statusMessage: '' },
-    invoices: { file: null, status: 'idle', progress: 0, observations: '', statusMessage: '' },
+    ecd: { file: null, status: 'idle', progress: 0, observations: '' },
+    bank: { file: null, status: 'idle', progress: 0, observations: '' },
+    invoices: { file: null, status: 'idle', progress: 0, observations: '' },
   })
 
   const updateTab = useCallback((id: TabKey, data: Partial<TabState>) => {
@@ -57,7 +56,7 @@ export default function Import() {
         })
         return
       }
-      updateTab(id, { file, status: 'idle', progress: 0, statusMessage: '' })
+      updateTab(id, { file, status: 'idle', progress: 0 })
     },
     [toast, updateTab],
   )
@@ -67,20 +66,16 @@ export default function Import() {
       const state = tabs[id]
       if (!state.file || state.status !== 'idle') return
 
-      updateTab(id, { status: 'processing', progress: 0, statusMessage: 'Iniciando...' })
+      updateTab(id, { status: 'processing', progress: 0 })
 
       const processData = async () => {
         if (id === 'ecd' && projectId) {
           try {
             const result = await parseAndImportEcd(state.file!, projectId, pb, (p) => {
-              updateTab(id, { progress: p.progress, statusMessage: p.status })
+              updateTab(id, { progress: p })
             })
 
-            updateTab(id, {
-              progress: 100,
-              status: 'validated',
-              statusMessage: 'Importação concluída!',
-            })
+            updateTab(id, { progress: 100, status: 'validated' })
             toast({
               title: 'Sucesso',
               description: `${result.accountsCount} contas e ${result.entriesCount} lançamentos importados com sucesso.`,
@@ -91,21 +86,12 @@ export default function Import() {
             }, 1500)
           } catch (error: any) {
             console.error(error)
-            if (error?.status === 401) {
-              toast({
-                variant: 'destructive',
-                title: 'Sessão expirada',
-                description: 'Sua sessão expirou. Faça login novamente.',
-              })
-              setTimeout(() => navigate('/login'), 1500)
-              return
-            }
             toast({
               variant: 'destructive',
               title: 'Erro na importação',
               description: getErrorMessage(error),
             })
-            updateTab(id, { status: 'idle', progress: 0, statusMessage: '' })
+            updateTab(id, { status: 'idle', progress: 0 })
           }
         } else {
           const interval = setInterval(() => {
@@ -224,20 +210,12 @@ export default function Import() {
                   {state.file && (
                     <div className="space-y-6">
                       {state.status === 'processing' && (
-                        <div className="space-y-3 animate-fade-in">
+                        <div className="space-y-2 animate-fade-in">
                           <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground font-medium">
-                              {state.statusMessage || 'Processando arquivo...'}
-                            </span>
+                            <span className="text-muted-foreground">Processando arquivo...</span>
                             <span className="font-medium">{state.progress}%</span>
                           </div>
                           <Progress value={state.progress} className="h-2" />
-                          {id === 'ecd' && state.statusMessage && (
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                              <span>{state.statusMessage}</span>
-                            </div>
-                          )}
                         </div>
                       )}
 
@@ -286,7 +264,7 @@ export default function Import() {
                           {state.status === 'processing' && (
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                           )}
-                          {state.status === 'validated' ? 'Concluído' : 'Processar Arquivo'}
+                          {state.status === 'validated' ? 'Processado' : 'Processar'}
                         </Button>
                       </div>
                     </div>

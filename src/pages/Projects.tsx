@@ -46,7 +46,6 @@ import { format } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 
 import pb from '@/lib/pocketbase/client'
-import { extractFieldErrors, getErrorMessage, type FieldErrors } from '@/lib/pocketbase/errors'
 import { AuditComment } from '@/services/audit_comments'
 import {
   getProjects,
@@ -69,7 +68,6 @@ export default function Projects() {
   const [projectToDelete, setProjectToDelete] = useState<string | null>(null)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
   const [auditComments, setAuditComments] = useState<AuditComment[]>([])
-  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
 
   const { toast } = useToast()
 
@@ -117,57 +115,31 @@ export default function Projects() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
-    setFieldErrors({})
-
     if (!formData.name.trim() || !formData.client.trim()) {
-      const errors: FieldErrors = {}
-      if (!formData.name.trim()) errors.name = 'Nome do projeto é obrigatório.'
-      if (!formData.client.trim()) errors.client = 'Cliente é obrigatório.'
-      setFieldErrors(errors)
       toast({
         variant: 'destructive',
         title: 'Erro de validação',
-        description: 'Preencha todos os campos obrigatórios.',
-      })
-      return
-    }
-
-    if (!user?.id) {
-      toast({
-        variant: 'destructive',
-        title: 'Erro de autenticação',
-        description: 'Usuário não autenticado. Faça login novamente.',
+        description: 'Nome e Cliente são obrigatórios.',
       })
       return
     }
 
     try {
       const newProj = await createProject({
-        name: formData.name.trim(),
-        client: formData.client.trim(),
+        name: formData.name,
+        client: formData.client,
         status: formData.status,
-        user_id: user.id,
       })
       setIsCreateOpen(false)
       setFormData({ name: '', client: '', status: 'active' })
       toast({ title: 'Sucesso', description: 'Projeto criado com sucesso.' })
       navigate(`/projects/${newProj.id}/import`)
     } catch (err) {
-      const errors = extractFieldErrors(err)
-      if (Object.keys(errors).length > 0) {
-        setFieldErrors(errors)
-        toast({
-          variant: 'destructive',
-          title: 'Erro de validação',
-          description: Object.values(errors).join(' '),
-        })
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Erro',
-          description: getErrorMessage(err),
-        })
-      }
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível criar o projeto.',
+      })
     }
   }
 
@@ -179,46 +151,30 @@ export default function Projects() {
   const handleUpdate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingProject) return
-    setFieldErrors({})
-
     if (!editingProject.name.trim() || !editingProject.client.trim()) {
-      const errors: FieldErrors = {}
-      if (!editingProject.name.trim()) errors.name = 'Nome do projeto é obrigatório.'
-      if (!editingProject.client.trim()) errors.client = 'Cliente é obrigatório.'
-      setFieldErrors(errors)
       toast({
         variant: 'destructive',
         title: 'Erro de validação',
-        description: 'Preencha todos os campos obrigatórios.',
+        description: 'Nome e Cliente são obrigatórios.',
       })
       return
     }
 
     try {
       await updateProject(editingProject.id, {
-        name: editingProject.name.trim(),
-        client: editingProject.client.trim(),
+        name: editingProject.name,
+        client: editingProject.client,
         status: editingProject.status,
       })
       setIsEditOpen(false)
       setEditingProject(null)
       toast({ title: 'Sucesso', description: 'Projeto atualizado com sucesso.' })
     } catch (err) {
-      const errors = extractFieldErrors(err)
-      if (Object.keys(errors).length > 0) {
-        setFieldErrors(errors)
-        toast({
-          variant: 'destructive',
-          title: 'Erro de validação',
-          description: Object.values(errors).join(' '),
-        })
-      } else {
-        toast({
-          variant: 'destructive',
-          title: 'Erro',
-          description: getErrorMessage(err),
-        })
-      }
+      toast({
+        variant: 'destructive',
+        title: 'Erro',
+        description: 'Não foi possível atualizar o projeto.',
+      })
     }
   }
 
@@ -331,17 +287,9 @@ export default function Projects() {
                     <Input
                       id="name"
                       value={formData.name}
-                      onChange={(e) => {
-                        setFormData({ ...formData, name: e.target.value })
-                        if (fieldErrors.name)
-                          setFieldErrors((prev) => ({ ...prev, name: undefined }))
-                      }}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       required
-                      className={
-                        fieldErrors.name ? 'border-red-500 focus-visible:ring-red-500' : ''
-                      }
                     />
-                    {fieldErrors.name && <p className="text-sm text-red-500">{fieldErrors.name}</p>}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="client">
@@ -350,19 +298,9 @@ export default function Projects() {
                     <Input
                       id="client"
                       value={formData.client}
-                      onChange={(e) => {
-                        setFormData({ ...formData, client: e.target.value })
-                        if (fieldErrors.client)
-                          setFieldErrors((prev) => ({ ...prev, client: undefined }))
-                      }}
+                      onChange={(e) => setFormData({ ...formData, client: e.target.value })}
                       required
-                      className={
-                        fieldErrors.client ? 'border-red-500 focus-visible:ring-red-500' : ''
-                      }
                     />
-                    {fieldErrors.client && (
-                      <p className="text-sm text-red-500">{fieldErrors.client}</p>
-                    )}
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="status">Status</Label>
@@ -505,14 +443,9 @@ export default function Projects() {
                   <Input
                     id="edit-name"
                     value={editingProject.name}
-                    onChange={(e) => {
-                      setEditingProject({ ...editingProject, name: e.target.value })
-                      if (fieldErrors.name) setFieldErrors((prev) => ({ ...prev, name: undefined }))
-                    }}
+                    onChange={(e) => setEditingProject({ ...editingProject, name: e.target.value })}
                     required
-                    className={fieldErrors.name ? 'border-red-500 focus-visible:ring-red-500' : ''}
                   />
-                  {fieldErrors.name && <p className="text-sm text-red-500">{fieldErrors.name}</p>}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-client">
@@ -521,19 +454,11 @@ export default function Projects() {
                   <Input
                     id="edit-client"
                     value={editingProject.client}
-                    onChange={(e) => {
+                    onChange={(e) =>
                       setEditingProject({ ...editingProject, client: e.target.value })
-                      if (fieldErrors.client)
-                        setFieldErrors((prev) => ({ ...prev, client: undefined }))
-                    }}
-                    required
-                    className={
-                      fieldErrors.client ? 'border-red-500 focus-visible:ring-red-500' : ''
                     }
+                    required
                   />
-                  {fieldErrors.client && (
-                    <p className="text-sm text-red-500">{fieldErrors.client}</p>
-                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-status">Status</Label>

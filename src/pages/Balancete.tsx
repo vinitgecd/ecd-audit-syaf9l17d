@@ -122,18 +122,24 @@ export default function Balancete() {
 
   const isLoadingData = loading || isProcessing
   const [showSlowWarning, setShowSlowWarning] = useState(false)
+  const [hasTimeout, setHasTimeout] = useState(false)
 
   useEffect(() => {
     let timer: NodeJS.Timeout
+    let timeoutTimer: NodeJS.Timeout
 
     if (isLoadingData) {
       setShowSlowWarning(false)
-      timer = setTimeout(() => setShowSlowWarning(true), 3000)
+      setHasTimeout(false)
+      timer = setTimeout(() => setShowSlowWarning(true), 2000)
+      timeoutTimer = setTimeout(() => setHasTimeout(true), 15000)
     } else {
       setShowSlowWarning(false)
+      setHasTimeout(false)
     }
     return () => {
       clearTimeout(timer)
+      clearTimeout(timeoutTimer)
     }
   }, [isLoadingData])
 
@@ -270,7 +276,41 @@ export default function Balancete() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {isLoadingData ? (
+            {hasTimeout || error?.message === 'TIMEOUT' ? (
+              <TableRow>
+                <TableCell colSpan={10} className="h-[400px] text-center">
+                  <div className="flex flex-col items-center justify-center gap-4">
+                    <AlertCircle className="h-10 w-10 text-destructive" />
+                    <p className="text-lg font-medium text-foreground">
+                      O carregamento dos dados está demorando muito.
+                    </p>
+                    <p className="text-sm text-muted-foreground max-w-md">
+                      Isso pode acontecer com projetos com um grande volume de dados. Você pode
+                      tentar carregar novamente ou ir para as configurações para limpar os dados se
+                      o problema persistir.
+                    </p>
+                    <div className="flex items-center gap-3 mt-2">
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          if (projectId) loadBalancete(projectId, 0, debouncedSearch)
+                        }}
+                      >
+                        <RefreshCw className="mr-2 h-4 w-4" />
+                        Tentar Novamente
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        onClick={() => projectId && resetProject(projectId)}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Resetar Projeto
+                      </Button>
+                    </div>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : isLoadingData ? (
               <TableRow>
                 <TableCell colSpan={10} className="h-[400px] text-center">
                   <div className="flex flex-col items-center justify-center gap-4">
@@ -295,35 +335,20 @@ export default function Balancete() {
                   </div>
                 </TableCell>
               </TableRow>
-            ) : error ? (
+            ) : error && error.message !== 'TIMEOUT' ? (
               <TableRow>
-                <TableCell colSpan={10} className="h-[400px] text-center">
-                  <div className="flex flex-col items-center justify-center gap-4">
-                    <AlertCircle className="h-10 w-10 text-destructive" />
-                    <p className="text-lg font-medium text-foreground">
+                <TableCell colSpan={10} className="h-32 text-center">
+                  <div className="flex flex-col items-center justify-center text-muted-foreground gap-4">
+                    <p className="text-destructive font-medium">
                       Erro ao carregar dados financeiros.
                     </p>
-                    <p className="text-sm text-muted-foreground max-w-md">
-                      {error.message || 'Ocorreu um erro inesperado. Tente novamente.'}
-                    </p>
-                    <div className="flex items-center gap-3 mt-2">
-                      <Button
-                        variant="outline"
-                        onClick={() => {
-                          if (projectId) loadBalancete(projectId, 0, debouncedSearch)
-                        }}
-                      >
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Tentar Novamente
-                      </Button>
-                      <Button
-                        variant="destructive"
-                        onClick={() => projectId && resetProject(projectId)}
-                      >
-                        <Trash2 className="mr-2 h-4 w-4" />
-                        Resetar Projeto
-                      </Button>
-                    </div>
+                    <Button
+                      variant="outline"
+                      onClick={() => projectId && loadBalancete(projectId, 0, debouncedSearch)}
+                    >
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Tentar Novamente
+                    </Button>
                   </div>
                 </TableCell>
               </TableRow>

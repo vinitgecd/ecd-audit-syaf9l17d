@@ -216,14 +216,10 @@ export const getEntryItemsByEntryIds = async (entryIds: string[]) => {
   }
 }
 
-export const getRootAccountBalances = async (
-  projectId: string,
-  page: number = 1,
-  perPage: number = 500,
-) => {
+export const getRootAccountBalances = async (projectId: string) => {
   try {
     if (!projectId) throw new Error('Project ID is required')
-    return await safeCollection('account_balances').getList<AccountBalance>(page, perPage, {
+    return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter: `project_id = "${projectId}" && level = 1`,
       sort: 'code',
     })
@@ -236,11 +232,10 @@ export const getRootAccountBalances = async (
 export const getChildAccountBalances = async (projectId: string, parentId: string) => {
   try {
     if (!projectId || !parentId) throw new Error('Project ID and Parent ID are required')
-    const res = await safeCollection('account_balances').getList<AccountBalance>(1, 500, {
+    return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter: `project_id = "${projectId}" && parent_id = "${parentId}"`,
       sort: 'code',
     })
-    return res.items
   } catch (error) {
     console.error('Error in getChildAccountBalances:', error)
     throw error

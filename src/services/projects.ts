@@ -13,8 +13,8 @@ export interface Project {
 export const getProjects = () =>
   pb.collection('projects').getFullList<Project>({ sort: '-created' })
 
-export const createProject = (data: Partial<Project> & { user_id: string }) =>
-  pb.collection('projects').create<Project>({ ...data })
+export const createProject = (data: Partial<Project>) =>
+  pb.collection('projects').create<Project>({ ...data, user_id: pb.authStore.record?.id })
 
 export const updateProject = (id: string, data: Partial<Project>) =>
   pb.collection('projects').update<Project>(id, data)
