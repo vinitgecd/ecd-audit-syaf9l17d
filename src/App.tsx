@@ -11,7 +11,7 @@ import Login from './pages/auth/Login'
 import Register from './pages/auth/Register'
 import Index from './pages/Index'
 import Projects from './pages/Projects'
-import Import from './pages/Import'
+import Importar from '@/pages/Importar'
 import Balancete from './pages/Balancete'
 
 import Razao from './pages/Razao'
@@ -34,7 +34,7 @@ const App = () => (
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
                 <Route path="/dashboard" element={<Index />} />
                 <Route path="/projects" element={<Projects />} />
-                <Route path="/projects/:projectId/import" element={<Import />} />
+                <Route path="/projects/:projectId/import" element={<Importar />} />
                 <Route path="/projects/:projectId/balancete" element={<Balancete />} />
                 <Route path="/projects/:projectId/razao/:accountId" element={<Razao />} />
                 <Route path="/projects/:projectId/pending" element={<Pending />} />
