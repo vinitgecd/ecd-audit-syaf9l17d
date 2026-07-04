@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Textarea } from '@/components/ui/textarea'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { UploadCloud, FileType2, Loader2, CheckCircle2, AlertCircle, X } from 'lucide-react'
 import { useEcdUpload } from '@/hooks/use-ecd-upload'
 import { useToast } from '@/hooks/use-toast'
@@ -30,6 +31,9 @@ export default function Importar() {
     uploadedRecords,
     totalRecords,
     estimatedTime,
+    isValidating,
+    validationError,
+    validationPassed,
     selectFile,
     startUpload,
     cancelUpload,
@@ -63,6 +67,22 @@ export default function Importar() {
   )
 
   const statusBadge = () => {
+    if (isValidating)
+      return (
+        <Badge variant="secondary" className="text-sm py-1 px-3">
+          Validando estrutura...
+        </Badge>
+      )
+    if (validationError)
+      return (
+        <Badge variant="destructive" className="text-sm py-1 px-3">
+          Inválido
+        </Badge>
+      )
+    if (validationPassed && status === 'idle')
+      return (
+        <Badge className="text-sm py-1 px-3 bg-green-500 hover:bg-green-500">Pré-validado</Badge>
+      )
     if (status === 'completed') return <Badge className="text-sm py-1 px-3">Validado</Badge>
     if (status === 'uploading')
       return (
@@ -165,6 +185,27 @@ export default function Importar() {
                 )}
               </div>
 
+              {isValidating && (
+                <div className="flex items-center gap-2 rounded-lg p-3 text-sm bg-muted text-muted-foreground animate-fade-in">
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                  <span>Validando estrutura do arquivo ECD...</span>
+                </div>
+              )}
+
+              {validationError && !isValidating && (
+                <Alert variant="destructive" className="animate-fade-in">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{validationError}</AlertDescription>
+                </Alert>
+              )}
+
+              {validationPassed && !isValidating && !validationError && status === 'idle' && (
+                <div className="flex items-center gap-2 rounded-lg p-3 text-sm bg-green-500/10 text-green-600 dark:text-green-400 animate-fade-in">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>Estrutura ECD validada com sucesso. Pronto para processar.</span>
+                </div>
+              )}
+
               {message && (
                 <div
                   className={cn(
@@ -228,6 +269,10 @@ export default function Importar() {
                     <Button variant="outline" onClick={cancelUpload}>
                       Cancelar
                     </Button>
+                  ) : isValidating ? (
+                    <Button variant="outline" onClick={resetUpload}>
+                      <X className="mr-2 h-4 w-4" /> Cancelar
+                    </Button>
                   ) : (
                     <div />
                   )}
@@ -238,8 +283,17 @@ export default function Importar() {
                   ) : status === 'completed' ? (
                     <Button disabled>Processado</Button>
                   ) : (
-                    <Button onClick={startUpload} disabled={status === 'error'}>
-                      Processar
+                    <Button
+                      onClick={startUpload}
+                      disabled={isValidating || !validationPassed || !!validationError}
+                    >
+                      {isValidating ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Validando...
+                        </>
+                      ) : (
+                        'Processar'
+                      )}
                     </Button>
                   )}
                 </div>
