@@ -438,3 +438,47 @@ export const getEntryItemsByDateRangeChunked = async (
     throw error
   }
 }
+
+export const getCashEntriesPaginated = async (
+  projectId: string,
+  page: number = 1,
+  perPage: number = 50,
+  options?: {
+    accountId?: string | null
+    search?: string
+    startDate?: string
+    endDate?: string
+  },
+) => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+
+    let filter = `entry_id.project_id = "${projectId}"`
+
+    if (options?.accountId) {
+      filter += ` && account_id = "${options.accountId}"`
+    }
+
+    if (options?.search) {
+      const s = options.search.replace(/"/g, '\\"')
+      filter += ` && (entry_id.description ~ "${s}" || entry_id.reference ~ "${s}")`
+    }
+
+    if (options?.startDate) {
+      filter += ` && entry_id.date >= "${options.startDate}"`
+    }
+
+    if (options?.endDate) {
+      filter += ` && entry_id.date <= "${options.endDate}"`
+    }
+
+    return await safeCollection('entry_items').getList<EntryItem>(page, perPage, {
+      filter,
+      expand: 'entry_id,account_id',
+      sort: '-entry_id.date,created',
+    })
+  } catch (error) {
+    console.error('Error in getCashEntriesPaginated:', error)
+    throw error
+  }
+}
