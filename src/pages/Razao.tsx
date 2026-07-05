@@ -6,14 +6,7 @@ import { format, parseISO } from 'date-fns'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
 
@@ -556,7 +549,7 @@ export default function Razao() {
         ref={tableContainerRef}
         onScroll={handleScroll}
       >
-        <Table className="relative min-w-[1200px]">
+        <table className="w-full caption-bottom text-sm relative min-w-[1200px]">
           <TableHeader className="sticky top-0 bg-background z-10 shadow-sm border-b">
             <TableRow>
               <TableHead className="w-[100px]">Data</TableHead>
@@ -708,7 +701,7 @@ export default function Razao() {
               </>
             )}
           </TableBody>
-        </Table>
+        </table>
       </div>
 
       <div className="flex items-center justify-between pt-1 pb-2 shrink-0 relative">
