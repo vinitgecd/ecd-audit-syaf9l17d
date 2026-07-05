@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { useCashEntries } from '@/hooks/use-cash-entries'
 import { useRealtime } from '@/hooks/use-realtime'
+import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import {
@@ -23,6 +24,8 @@ import {
   TableFooter,
 } from '@/components/ui/table'
 import { ChevronLeft, ChevronRight, Search, Wallet, FileSearch, X } from 'lucide-react'
+import { InlineAuditNote } from '@/components/InlineAuditNote'
+import { getAuditCommentsByProject, type AuditComment } from '@/services/audit_comments'
 
 const PER_PAGE = 50
 
@@ -48,6 +51,7 @@ function getPageRange(current: number, total: number): (number | '…')[] {
 
 export default function PresuncoesLegais() {
   const { projectId } = useParams<{ projectId: string }>()
+  const { user } = useAuth()
   const {
     items,
     accounts,
@@ -64,6 +68,7 @@ export default function PresuncoesLegais() {
   } = useCashEntries(projectId || '', PER_PAGE)
 
   const [searchInput, setSearchInput] = useState(filters.search)
+  const [commentsMap, setCommentsMap] = useState<Record<string, AuditComment>>({})
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -79,8 +84,38 @@ export default function PresuncoesLegais() {
     setSearchInput(filters.search)
   }, [filters.search])
 
+  const loadComments = () => {
+    if (!projectId) return
+    getAuditCommentsByProject(projectId)
+      .then((comments: AuditComment[]) => {
+        const map: Record<string, AuditComment> = {}
+        for (const c of comments) {
+          map[c.entry_reference] = c
+        }
+        setCommentsMap(map)
+      })
+      .catch(() => {})
+  }
+
+  useEffect(() => {
+    loadComments()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [projectId])
+
   useRealtime('entry_items', () => refetch())
   useRealtime('journal_entries', () => refetch())
+  useRealtime('audit_comments', () => loadComments())
+
+  const runningBalances = useMemo(() => {
+    const balances: Record<string, number> = {}
+    const result: Record<string, number> = {}
+    for (const item of items) {
+      const accId = item.account_id
+      balances[accId] = (balances[accId] || 0) + (item.type === 'debit' ? item.value : -item.value)
+      result[item.id] = balances[accId]
+    }
+    return result
+  }, [items])
 
   const totalDebit = items.reduce((s, i) => s + (i.type === 'debit' ? i.value : 0), 0)
   const totalCredit = items.reduce((s, i) => s + (i.type === 'credit' ? i.value : 0), 0)
@@ -180,23 +215,24 @@ export default function PresuncoesLegais() {
             )}
           </div>
 
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
+          <div className="rounded-md border overflow-x-auto overflow-y-hidden">
+            <Table className="min-w-[1100px]">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[120px]">Data</TableHead>
-                  <TableHead>Histórico</TableHead>
-                  <TableHead className="w-[120px]">Referência</TableHead>
-                  <TableHead className="w-[180px]">Conta</TableHead>
-                  <TableHead className="w-[140px] text-right">Débito</TableHead>
-                  <TableHead className="w-[140px] text-right">Crédito</TableHead>
+                  <TableHead className="w-[100px] whitespace-nowrap">Data</TableHead>
+                  <TableHead className="w-[180px] whitespace-nowrap">Conta Contábil</TableHead>
+                  <TableHead className="min-w-[220px]">Histórico</TableHead>
+                  <TableHead className="w-[130px] text-right whitespace-nowrap">Débito</TableHead>
+                  <TableHead className="w-[130px] text-right whitespace-nowrap">Crédito</TableHead>
+                  <TableHead className="w-[140px] text-right whitespace-nowrap">Saldo</TableHead>
+                  <TableHead className="w-[240px] whitespace-nowrap">Anotações</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {loading ? (
                   Array.from({ length: 8 }).map((_, i) => (
                     <TableRow key={`skel-${i}`}>
-                      {Array.from({ length: 6 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <TableCell key={`skel-${i}-${j}`}>
                           <Skeleton className="h-5 w-full" />
                         </TableCell>
@@ -205,7 +241,7 @@ export default function PresuncoesLegais() {
                   ))
                 ) : items.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-12 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-12 text-muted-foreground">
                       <div className="flex flex-col items-center gap-2">
                         <FileSearch className="h-10 w-10 opacity-40" />
                         <p className="text-sm">
@@ -222,21 +258,29 @@ export default function PresuncoesLegais() {
                     const account = item.expand?.account_id
                     return (
                       <TableRow key={item.id} className="hover:bg-muted/50 transition-colors">
-                        <TableCell className="font-mono text-sm">
+                        <TableCell className="font-mono text-sm whitespace-nowrap">
                           {fmtDate(entry?.date || '')}
                         </TableCell>
-                        <TableCell className="text-sm">{entry?.description || '—'}</TableCell>
-                        <TableCell className="font-mono text-xs text-muted-foreground">
-                          {entry?.reference || '—'}
-                        </TableCell>
-                        <TableCell className="text-sm">
+                        <TableCell className="text-sm whitespace-nowrap">
                           {account ? `${account.code} — ${account.name}` : '—'}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
+                        <TableCell className="text-sm">{entry?.description || '—'}</TableCell>
+                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">
                           {item.type === 'debit' ? fmtCurrency(item.value) : '—'}
                         </TableCell>
-                        <TableCell className="text-right font-mono text-sm">
+                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">
                           {item.type === 'credit' ? fmtCurrency(item.value) : '—'}
+                        </TableCell>
+                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">
+                          {fmtCurrency(runningBalances[item.id] || 0)}
+                        </TableCell>
+                        <TableCell>
+                          <InlineAuditNote
+                            projectId={projectId}
+                            entryReference={item.id}
+                            userId={user?.id || ''}
+                            comment={commentsMap[item.id] || null}
+                          />
                         </TableCell>
                       </TableRow>
                     )
@@ -246,13 +290,14 @@ export default function PresuncoesLegais() {
               {!loading && items.length > 0 && (
                 <TableFooter>
                   <TableRow className="font-semibold">
-                    <TableCell colSpan={4}>Total da página</TableCell>
+                    <TableCell colSpan={3}>Total da página</TableCell>
                     <TableCell className="text-right font-mono">
                       {fmtCurrency(totalDebit)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
                       {fmtCurrency(totalCredit)}
                     </TableCell>
+                    <TableCell colSpan={2} />
                   </TableRow>
                 </TableFooter>
               )}
