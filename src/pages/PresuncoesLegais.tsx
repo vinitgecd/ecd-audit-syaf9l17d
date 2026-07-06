@@ -34,7 +34,10 @@ const fmtCurrency = (v: number) =>
 
 const fmtDate = (d: string) => {
   if (!d) return '—'
-  return new Date(d + 'T00:00:00').toLocaleDateString('pt-BR')
+  const dateStr = d.split(' ')[0]
+  const date = new Date(dateStr + 'T00:00:00')
+  if (isNaN(date.getTime())) return '—'
+  return date.toLocaleDateString('pt-BR')
 }
 
 function getPageRange(current: number, total: number): (number | '…')[] {
