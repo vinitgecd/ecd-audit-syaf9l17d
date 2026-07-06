@@ -2,9 +2,8 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
-import { CheckCircle, XCircle, Loader2, Upload, X, Download } from 'lucide-react'
-
-type UploadStatus = 'idle' | 'processing' | 'uploading' | 'success' | 'error'
+import { CheckCircle, XCircle, Loader2, Upload, X, Download, RotateCcw } from 'lucide-react'
+import type { UploadPhase } from '@/hooks/use-ecd-upload'
 
 interface FailedLine {
   lineNumber: number
@@ -13,18 +12,22 @@ interface FailedLine {
 
 interface EcdUploadProgressProps {
   progress: number
-  status: UploadStatus
+  phase: UploadPhase
   message: string
   uploadedRecords: number
   totalRecords: number
+  uploadedBatches: number
+  totalBatches: number
+  speed: string
   estimatedTime: string
   onCancel: () => void
+  onRetry: () => void
   failedLines?: FailedLine[]
   onDownloadErrorLog?: () => void
 }
 
-const statusConfig: Record<
-  UploadStatus,
+const phaseConfig: Record<
+  UploadPhase,
   {
     label: string
     variant: 'default' | 'secondary' | 'destructive' | 'outline'
@@ -40,21 +43,28 @@ const statusConfig: Record<
     icon: Loader2,
     spin: false,
   },
+  reading: {
+    label: 'Lendo arquivo...',
+    variant: 'secondary',
+    color: 'text-blue-500',
+    icon: Loader2,
+    spin: true,
+  },
   processing: {
-    label: 'Processando',
+    label: 'Processando...',
     variant: 'secondary',
     color: 'text-blue-500',
     icon: Loader2,
     spin: true,
   },
   uploading: {
-    label: 'Enviando',
+    label: 'Enviando...',
     variant: 'secondary',
     color: 'text-blue-500',
     icon: Upload,
     spin: false,
   },
-  success: {
+  completed: {
     label: 'Concluído',
     variant: 'default',
     color: 'text-green-500',
@@ -72,20 +82,24 @@ const statusConfig: Record<
 
 export function EcdUploadProgress({
   progress,
-  status,
+  phase,
   message,
   uploadedRecords,
   totalRecords,
+  uploadedBatches,
+  totalBatches,
+  speed,
   estimatedTime,
   onCancel,
+  onRetry,
   failedLines,
   onDownloadErrorLog,
 }: EcdUploadProgressProps) {
-  const config = statusConfig[status]
+  const config = phaseConfig[phase]
   const Icon = config.icon
-  const isActive = status === 'processing' || status === 'uploading'
+  const isActive = phase === 'reading' || phase === 'processing' || phase === 'uploading'
   const hasErrors =
-    (status === 'error' || (failedLines != null && failedLines.length > 0)) && !!onDownloadErrorLog
+    (phase === 'error' || (failedLines != null && failedLines.length > 0)) && !!onDownloadErrorLog
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -98,8 +112,7 @@ export function EcdUploadProgress({
         </div>
         {isActive && (
           <Button variant="outline" size="sm" onClick={onCancel}>
-            <X className="mr-1 h-3 w-3" />
-            Cancelar
+            <X className="mr-1 h-3 w-3" /> Cancelar
           </Button>
         )}
       </div>
@@ -109,19 +122,32 @@ export function EcdUploadProgress({
           value={progress}
           className={cn(
             'h-3',
-            status === 'success' && '[&>div]:bg-green-500',
-            status === 'error' && '[&>div]:bg-red-500',
+            phase === 'completed' && '[&>div]:bg-green-500',
+            phase === 'error' && '[&>div]:bg-red-500',
           )}
         />
         <div className="flex justify-between text-sm">
           <span className="text-muted-foreground font-medium">{progress}%</span>
-          {isActive && (
-            <span className="text-muted-foreground">
-              {uploadedRecords} de {totalRecords} registros enviados
-            </span>
-          )}
+          {isActive && speed && <span className="text-muted-foreground">{speed}</span>}
         </div>
       </div>
+
+      {isActive && (
+        <div className="grid grid-cols-2 gap-2 text-sm">
+          <div className="rounded-md bg-muted/50 px-3 py-2">
+            <span className="text-muted-foreground">Registros: </span>
+            <span className="font-medium">
+              {uploadedRecords} de {totalRecords}
+            </span>
+          </div>
+          <div className="rounded-md bg-muted/50 px-3 py-2">
+            <span className="text-muted-foreground">Lotes: </span>
+            <span className="font-medium">
+              {uploadedBatches} de {totalBatches}
+            </span>
+          </div>
+        </div>
+      )}
 
       {isActive && estimatedTime && (
         <p className="text-sm text-muted-foreground">Tempo estimado: {estimatedTime}</p>
@@ -129,8 +155,7 @@ export function EcdUploadProgress({
 
       {hasErrors && (
         <Button variant="outline" size="sm" onClick={onDownloadErrorLog}>
-          <Download className="mr-1 h-3 w-3" />
-          Baixar Log de Erros
+          <Download className="mr-1 h-3 w-3" /> Baixar Log de Erros
         </Button>
       )}
 
@@ -138,11 +163,21 @@ export function EcdUploadProgress({
         <p
           className={cn(
             'text-sm font-medium',
-            status === 'error' ? 'text-red-500' : 'text-green-500',
+            phase === 'error'
+              ? 'text-red-500'
+              : phase === 'completed'
+                ? 'text-green-500'
+                : 'text-muted-foreground',
           )}
         >
           {message}
         </p>
+      )}
+
+      {phase === 'error' && (
+        <Button onClick={onRetry} className="w-full">
+          <RotateCcw className="mr-2 h-4 w-4" /> Tentar Novamente
+        </Button>
       )}
     </div>
   )

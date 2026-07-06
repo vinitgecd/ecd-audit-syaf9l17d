@@ -8,34 +8,30 @@ import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Upload, FileText, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-type ComponentStatus = 'idle' | 'processing' | 'uploading' | 'success' | 'error'
-
-function mapStatus(isValidating: boolean, status: string): ComponentStatus {
-  if (isValidating) return 'processing'
-  if (status === 'completed') return 'success'
-  if (status === 'idle') return 'idle'
-  if (status === 'uploading') return 'uploading'
-  return 'error'
-}
-
 export default function Importar() {
   const { projectId } = useParams<{ projectId: string }>()
   const {
     file,
     progress,
+    phase,
     status,
     message,
     uploadedRecords,
     totalRecords,
+    uploadedBatches,
+    totalBatches,
+    speed,
     estimatedTime,
     isValidating,
     validationError,
     validationPassed,
     failedLines,
+    isUploading,
     selectFile,
     startUpload,
     cancelUpload,
     resetUpload,
+    retryUpload,
     downloadErrorLogFile,
   } = useEcdUpload(projectId)
 
@@ -54,8 +50,7 @@ export default function Importar() {
     if (dropped) selectFile(dropped)
   }
 
-  const componentStatus = mapStatus(isValidating, status)
-  const showProgress = status === 'uploading' || status === 'completed' || status === 'error'
+  const showProgress = isUploading || status === 'completed' || status === 'error'
 
   return (
     <div className="container mx-auto max-w-3xl space-y-6 p-4 md:p-8">
@@ -86,6 +81,7 @@ export default function Importar() {
               'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors',
               dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25',
               file && 'border-solid border-primary/50',
+              isUploading && 'pointer-events-none opacity-50',
             )}
             onDragOver={(e) => {
               e.preventDefault()
@@ -100,6 +96,7 @@ export default function Importar() {
               accept=".txt"
               className="hidden"
               onChange={handleFileSelect}
+              disabled={isUploading}
             />
             <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">
@@ -114,7 +111,7 @@ export default function Importar() {
               size="sm"
               className="mt-3"
               onClick={() => inputRef.current?.click()}
-              disabled={status === 'uploading'}
+              disabled={isUploading}
             >
               Selecionar arquivo
             </Button>
@@ -145,28 +142,36 @@ export default function Importar() {
             </Alert>
           )}
 
-          {file && validationPassed && status !== 'uploading' && status !== 'completed' && (
-            <Button onClick={startUpload} className="w-full">
-              <Upload className="mr-2 h-4 w-4" />
-              Iniciar Importação
-            </Button>
-          )}
+          {file &&
+            validationPassed &&
+            !isUploading &&
+            status !== 'completed' &&
+            phase !== 'error' && (
+              <Button onClick={startUpload} className="w-full">
+                <Upload className="mr-2 h-4 w-4" />
+                Iniciar Importação
+              </Button>
+            )}
 
           {showProgress && (
             <EcdUploadProgress
               progress={progress}
-              status={componentStatus}
+              phase={phase}
               message={message}
               uploadedRecords={uploadedRecords}
               totalRecords={totalRecords}
+              uploadedBatches={uploadedBatches}
+              totalBatches={totalBatches}
+              speed={speed}
               estimatedTime={estimatedTime}
               onCancel={cancelUpload}
+              onRetry={retryUpload}
               failedLines={failedLines}
               onDownloadErrorLog={downloadErrorLogFile}
             />
           )}
 
-          {(status === 'completed' || status === 'error') && (
+          {status === 'completed' && (
             <div className="flex gap-2">
               <Button variant="outline" onClick={resetUpload} className="flex-1">
                 Novo Upload

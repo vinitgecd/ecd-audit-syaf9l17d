@@ -133,7 +133,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
     const timeoutPromise = new Promise((_, reject) => {
       fetchTimeoutRef.current = setTimeout(() => {
         reject(new Error('TIMEOUT'))
-      }, 20000)
+      }, 120000)
     })
 
     try {
