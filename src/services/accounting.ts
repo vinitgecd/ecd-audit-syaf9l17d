@@ -128,7 +128,6 @@ export const getAccountBalances = async (projectId: string, level?: number, sear
     return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter,
       sort: 'code',
-      $cancelKey: `balancete_${projectId}_${level}_${search}`,
     })
   } catch (error) {
     console.error('Error in getAccountBalances:', error)
