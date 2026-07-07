@@ -127,7 +127,12 @@ export default function ProjectSettings() {
         </CardContent>
       </Card>
 
-      <AlertDialog open={isResetOpen} onOpenChange={setIsResetOpen}>
+      <AlertDialog
+        open={isResetOpen}
+        onOpenChange={(open) => {
+          if (!isResetting) setIsResetOpen(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Resetar Dados do Projeto?</AlertDialogTitle>
@@ -152,7 +157,12 @@ export default function ProjectSettings() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <AlertDialog open={isDeleteOpen} onOpenChange={setIsDeleteOpen}>
+      <AlertDialog
+        open={isDeleteOpen}
+        onOpenChange={(open) => {
+          if (!isDeleting) setIsDeleteOpen(open)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir Projeto Definitivamente?</AlertDialogTitle>
