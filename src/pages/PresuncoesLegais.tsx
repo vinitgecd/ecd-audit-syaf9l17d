@@ -1,17 +1,10 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-import { useCashEntries } from '@/hooks/use-cash-entries'
+import { useNegativeCashBalances } from '@/hooks/use-negative-cash-balances'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from '@/hooks/use-auth'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import {
@@ -23,9 +16,18 @@ import {
   TableRow,
   TableFooter,
 } from '@/components/ui/table'
-import { ChevronLeft, ChevronRight, Search, Wallet, FileSearch, X } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Wallet,
+  FileSearch,
+  X,
+  AlertTriangle,
+} from 'lucide-react'
 import { InlineAuditNote } from '@/components/InlineAuditNote'
 import { getAuditCommentsByProject, type AuditComment } from '@/services/audit_comments'
+import type { CashBalanceEntry } from '@/services/presuncoes'
 
 const PER_PAGE = 50
 
@@ -57,7 +59,6 @@ export default function PresuncoesLegais() {
   const { user } = useAuth()
   const {
     items,
-    accounts,
     page,
     totalPages,
     totalItems,
@@ -68,7 +69,7 @@ export default function PresuncoesLegais() {
     prevPage,
     goToPage,
     refetch,
-  } = useCashEntries(projectId || '', PER_PAGE)
+  } = useNegativeCashBalances(projectId || '', PER_PAGE)
 
   const [searchInput, setSearchInput] = useState(filters.search)
   const [commentsMap, setCommentsMap] = useState<Record<string, AuditComment>>({})
@@ -109,24 +110,12 @@ export default function PresuncoesLegais() {
   useRealtime('journal_entries', () => refetch())
   useRealtime('audit_comments', () => loadComments())
 
-  const runningBalances = useMemo(() => {
-    const balances: Record<string, number> = {}
-    const result: Record<string, number> = {}
-    for (const item of items) {
-      const accId = item.account_id
-      balances[accId] = (balances[accId] || 0) + (item.type === 'debit' ? item.value : -item.value)
-      result[item.id] = balances[accId]
-    }
-    return result
-  }, [items])
-
   const totalDebit = items.reduce((s, i) => s + (i.type === 'debit' ? i.value : 0), 0)
   const totalCredit = items.reduce((s, i) => s + (i.type === 'credit' ? i.value : 0), 0)
-  const hasFilters = filters.accountId || filters.search || filters.startDate || filters.endDate
+  const hasFilters = filters.search || filters.startDate || filters.endDate
 
   const clearFilters = () => {
     updateFilters({
-      accountId: null,
       search: '',
       startDate: '',
       endDate: '',
@@ -145,6 +134,19 @@ export default function PresuncoesLegais() {
         </div>
       </div>
 
+      <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:border-amber-900 dark:bg-amber-950/40">
+        <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="space-y-0.5">
+          <p className="text-sm font-medium text-amber-900 dark:text-amber-200">
+            Filtro automático de contas de Caixa e Equivalentes
+          </p>
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            Apenas contas classificadas como Caixa, Bancos ou Equivalentes com saldo credor
+            (negativo) são exibidas automaticamente.
+          </p>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
@@ -153,69 +155,53 @@ export default function PresuncoesLegais() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="flex flex-col gap-1.5 min-w-[180px]">
-              <label className="text-xs font-medium text-muted-foreground">Conta</label>
-              <Select
-                value={filters.accountId || 'all'}
-                onValueChange={(v) =>
-                  updateFilters({
-                    accountId: v === 'all' ? null : v,
-                  })
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Todas as contas" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as contas</SelectItem>
-                  {accounts.map((a) => (
-                    <SelectItem key={a.id} value={a.id}>
-                      {a.code} — {a.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          <div className="space-y-4">
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex flex-col gap-1.5 w-full sm:w-[220px]">
+                <label className="text-xs font-medium text-muted-foreground">Data Início</label>
+                <Input
+                  type="date"
+                  value={filters.startDate}
+                  onChange={(e) => updateFilters({ startDate: e.target.value })}
+                />
+              </div>
+
+              <div className="flex flex-col gap-1.5 w-full sm:w-[220px]">
+                <label className="text-xs font-medium text-muted-foreground">Data Fim</label>
+                <Input
+                  type="date"
+                  value={filters.endDate}
+                  onChange={(e) => updateFilters({ endDate: e.target.value })}
+                />
+              </div>
             </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Data Início</label>
-              <Input
-                type="date"
-                value={filters.startDate}
-                onChange={(e) => updateFilters({ startDate: e.target.value })}
-                className="w-[160px]"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Data Fim</label>
-              <Input
-                type="date"
-                value={filters.endDate}
-                onChange={(e) => updateFilters({ endDate: e.target.value })}
-                className="w-[160px]"
-              />
-            </div>
-
-            <div className="flex flex-col gap-1.5 flex-1 min-w-[200px]">
-              <label className="text-xs font-medium text-muted-foreground">Buscar Histórico</label>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-medium text-muted-foreground">
+                  Buscar Histórico
+                </label>
+                {hasFilters && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={clearFilters}
+                    className="h-5 px-1 text-xs gap-1 -mb-1"
+                  >
+                    <X className="h-3 w-3" /> Limpar
+                  </Button>
+                )}
+              </div>
               <div className="relative">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Descrição ou referência..."
+                  placeholder="Descrição, referência ou conta..."
                   value={searchInput}
                   onChange={(e) => setSearchInput(e.target.value)}
                   className="pl-8"
                 />
               </div>
             </div>
-
-            {hasFilters && (
-              <Button variant="outline" size="sm" onClick={clearFilters} className="gap-1">
-                <X className="h-4 w-4" /> Limpar
-              </Button>
-            )}
           </div>
 
           <div className="rounded-md border overflow-x-auto overflow-y-hidden">
@@ -249,45 +235,41 @@ export default function PresuncoesLegais() {
                         <FileSearch className="h-10 w-10 opacity-40" />
                         <p className="text-sm">
                           {hasFilters
-                            ? 'Nenhum lançamento encontrado com os filtros aplicados.'
-                            : 'Nenhum lançamento encontrado. Importe os dados contábeis para visualizar.'}
+                            ? 'Nenhum registro encontrado para este período.'
+                            : 'Nenhum saldo credor de caixa encontrado. Nenhuma irregularidade detectada nos dados contábeis.'}
                         </p>
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : (
-                  items.map((item) => {
-                    const entry = item.expand?.entry_id
-                    const account = item.expand?.account_id
-                    return (
-                      <TableRow key={item.id} className="hover:bg-muted/50 transition-colors">
-                        <TableCell className="font-mono text-sm whitespace-nowrap">
-                          {fmtDate(entry?.date || '')}
-                        </TableCell>
-                        <TableCell className="text-sm whitespace-nowrap">
-                          {account ? `${account.code} — ${account.name}` : '—'}
-                        </TableCell>
-                        <TableCell className="text-sm">{entry?.description || '—'}</TableCell>
-                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">
-                          {item.type === 'debit' ? fmtCurrency(item.value) : '—'}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">
-                          {item.type === 'credit' ? fmtCurrency(item.value) : '—'}
-                        </TableCell>
-                        <TableCell className="text-right font-mono text-sm whitespace-nowrap">
-                          {fmtCurrency(runningBalances[item.id] || 0)}
-                        </TableCell>
-                        <TableCell>
-                          <InlineAuditNote
-                            projectId={projectId}
-                            entryReference={item.id}
-                            userId={user?.id || ''}
-                            comment={commentsMap[item.id] || null}
-                          />
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })
+                  items.map((item: CashBalanceEntry) => (
+                    <TableRow key={item.id} className="hover:bg-muted/50 transition-colors">
+                      <TableCell className="font-mono text-sm whitespace-nowrap">
+                        {fmtDate(item.entryDate)}
+                      </TableCell>
+                      <TableCell className="text-sm whitespace-nowrap">
+                        {item.accountCode} — {item.accountName}
+                      </TableCell>
+                      <TableCell className="text-sm">{item.entryDescription || '—'}</TableCell>
+                      <TableCell className="text-right font-mono text-sm whitespace-nowrap">
+                        {item.type === 'debit' ? fmtCurrency(item.value) : '—'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm whitespace-nowrap">
+                        {item.type === 'credit' ? fmtCurrency(item.value) : '—'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm whitespace-nowrap text-red-600 dark:text-red-400">
+                        {fmtCurrency(item.runningBalance)}
+                      </TableCell>
+                      <TableCell>
+                        <InlineAuditNote
+                          projectId={projectId}
+                          entryReference={item.id}
+                          userId={user?.id || ''}
+                          comment={commentsMap[item.id] || null}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
               </TableBody>
               {!loading && items.length > 0 && (
