@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Loader2,
   AlertCircle,
+  RotateCcw,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -55,6 +56,7 @@ export default function Balancete() {
     progressText,
     isBackgroundLoading,
     isTimeout,
+    backgroundError,
   } = useAccountingStore()
 
   const [searchTerm, setSearchTerm] = useState('')
@@ -112,6 +114,9 @@ export default function Balancete() {
   )
 
   const isLoadingData = loading || isProcessing
+  const isTimeoutError =
+    isTimeout ||
+    (!!error && (error.message.includes('TIMEOUT') || error.message.includes('demorando')))
   const [showSlowWarning, setShowSlowWarning] = useState(false)
 
   useEffect(() => {
@@ -174,7 +179,13 @@ export default function Balancete() {
         </div>
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
           <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
-            <Button variant="ghost" size="icon" className="h-8 w-8" title="Exportar PDF">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title="Exportar PDF"
+              aria-label="Exportar PDF"
+            >
               <FileText className="h-4 w-4" />
             </Button>
             <Button
@@ -182,10 +193,17 @@ export default function Balancete() {
               size="icon"
               className="h-8 w-8 text-green-600"
               title="Exportar Excel"
+              aria-label="Exportar Excel"
             >
               <TableIcon className="h-4 w-4" />
             </Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8" title="Exportar TXT">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              title="Exportar TXT"
+              aria-label="Exportar TXT"
+            >
               <FileDown className="h-4 w-4" />
             </Button>
           </div>
@@ -230,23 +248,40 @@ export default function Balancete() {
         </div>
       </div>
 
-      {(isTimeout || isBackgroundLoading) && (
+      {(isTimeoutError || isBackgroundLoading) && (
         <div
           className={cn(
             'border rounded-md p-3 flex items-center gap-2',
-            isTimeout ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200',
+            isTimeoutError ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200',
           )}
         >
-          {isTimeout ? (
+          {isTimeoutError ? (
             <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
           ) : (
             <Loader2 className="h-5 w-5 text-blue-600 shrink-0 animate-spin" />
           )}
-          <p className={cn('text-sm', isTimeout ? 'text-amber-800' : 'text-blue-800')}>
-            {isTimeout
+          <p className={cn('text-sm', isTimeoutError ? 'text-amber-800' : 'text-blue-800')}>
+            {isTimeoutError
               ? 'O carregamento está demorando. Dados parciais carregados. Aguarde...'
               : progressText || 'Carregando registros restantes...'}
           </p>
+        </div>
+      )}
+
+      {backgroundError && processedData.length > 0 && (
+        <div className="border rounded-md p-3 flex items-center gap-2 bg-red-50 border-red-200">
+          <AlertCircle className="h-5 w-5 text-red-600 shrink-0" />
+          <p className="text-sm text-red-800 flex-1">
+            Erro ao carregar registros restantes: {backgroundError}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => projectId && loadBalancete(projectId, 0, debouncedSearch)}
+          >
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Tentar Novamente
+          </Button>
         </div>
       )}
 
@@ -293,20 +328,44 @@ export default function Balancete() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : error && !isTimeout ? (
+              ) : error && !isTimeoutError && processedData.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center text-muted-foreground gap-4">
                       <p className="text-destructive font-medium">
                         Erro ao carregar dados financeiros.
                       </p>
-                      <Button
-                        variant="outline"
-                        onClick={() => projectId && loadBalancete(projectId, 0, debouncedSearch)}
-                      >
-                        <RefreshCw className="mr-2 h-4 w-4" />
-                        Tentar Novamente
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          aria-label="Tentar carregar novamente"
+                          onClick={() => projectId && loadBalancete(projectId, 0, debouncedSearch)}
+                        >
+                          <RefreshCw className="mr-2 h-4 w-4" />
+                          Tentar Novamente
+                        </Button>
+                        {projectId && (
+                          <Button
+                            variant="destructive"
+                            aria-label="Resetar projeto"
+                            onClick={() => resetProject(projectId)}
+                          >
+                            <RotateCcw className="mr-2 h-4 w-4" />
+                            Resetar Projeto
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ) : isTimeoutError && processedData.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={10} className="h-32 text-center">
+                    <div className="flex flex-col items-center justify-center gap-4">
+                      <AlertCircle className="h-10 w-10 text-amber-600" />
+                      <p className="text-amber-800 font-medium">
+                        O carregamento está demorando. Dados parciais carregados. Aguarde...
+                      </p>
                     </div>
                   </TableCell>
                 </TableRow>

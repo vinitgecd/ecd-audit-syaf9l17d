@@ -52,6 +52,7 @@ interface AccountingState {
   isProcessing: boolean
   hasLoaded: boolean
   error: Error | null
+  backgroundError: string | null
   progressText: string
   isBackgroundLoading: boolean
   isTimeout: boolean
@@ -111,6 +112,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   const [progressText, setProgressText] = useState('')
   const [isBackgroundLoading, setIsBackgroundLoading] = useState(false)
   const [isTimeout, setIsTimeout] = useState(false)
+  const [backgroundError, setBackgroundError] = useState<string | null>(null)
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastProgressUpdateRef = useRef<number>(0)
 
@@ -122,6 +124,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
       setItems([])
       setProcessedBalancete(null)
       setProcessedAnalysis(null)
+      setBackgroundError(null)
       toast.success('Projeto resetado com sucesso')
     } catch (e) {
       console.error(e)
@@ -140,6 +143,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
     setLoading(true)
     setError(null)
     setIsTimeout(false)
+    setBackgroundError(null)
     setProgressText('Buscando dados no servidor...')
 
     const queryLevel = search ? undefined : 1
@@ -237,7 +241,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
           } else {
             console.error(e)
             const errMsg = e instanceof Error ? e.message : 'Erro ao carregar balancete'
-            setError(new Error(errMsg))
+            setBackgroundError(errMsg)
             setProgressText('')
           }
         } finally {
@@ -423,6 +427,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         isProcessing,
         hasLoaded,
         error,
+        backgroundError,
         progressText,
         isBackgroundLoading,
         isTimeout,
