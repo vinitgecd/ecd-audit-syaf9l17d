@@ -42,33 +42,23 @@ const CATEGORY_CONFIG: Record<AssetCategory, CategoryConfig> = {
   imoveis: {
     label: 'Imóveis',
     keywords: [
-      'imóvel',
       'imovel',
       'terreno',
-      'terrenos',
-      'edificação',
       'edificacao',
-      'edifício',
       'edificio',
-      'prédio',
       'predio',
       'propriedade',
-      'construção',
       'construcao',
       'benfeitoria',
-      'benfeitorias',
       'obra em andamento',
-      'obras em andamento',
-      'obra andamento',
-      'instalação',
       'instalacao',
+      'propriedade de investimento',
     ],
     recommendation: 'Nenhum imóvel registrado. Verifique se há propriedades não contabilizadas.',
   },
   aplicacoes: {
     label: 'Aplicações Financeiras',
     keywords: [
-      'aplicação',
       'aplicacao',
       'investimento',
       'fundo',
@@ -76,14 +66,10 @@ const CATEGORY_CONFIG: Record<AssetCategory, CategoryConfig> = {
       'cdb',
       'rdb',
       'tesouro',
-      'poupança',
       'poupanca',
-      'título',
       'titulo',
-      'debênture',
       'debenture',
-      'aplicação financeira',
-      'aplicacao financeira',
+      'liquidez',
     ],
     recommendation:
       'Nenhuma aplicação financeira registrada. Verifique se há investimentos não contabilizados.',
@@ -93,46 +79,40 @@ const CATEGORY_CONFIG: Record<AssetCategory, CategoryConfig> = {
     keywords: [
       'estoque',
       'mercadoria',
-      'mercadorias',
       'produto',
-      'produtos',
-      'inventário',
       'inventario',
       'almoxarifado',
-      'matéria-prima',
       'materia-prima',
-      'matéria prima',
       'materia prima',
       'insumo',
-      'insumos',
-      'produtos acabados',
-      'produtos em elaboração',
-      'produtos em elaboracao',
     ],
     recommendation: 'Nenhum estoque registrado. Verifique se há inventários não contabilizados.',
   },
   veiculos: {
     label: 'Veículos',
     keywords: [
-      'veículo',
       'veiculo',
-      'automóvel',
       'automovel',
-      'caminhão',
       'caminhao',
       'moto',
       'frota',
       'carro',
       'trator',
-      'tratores',
       'reboque',
       'semitrator',
-      'máquina',
       'maquina',
       'implemento',
+      'utilitario',
     ],
     recommendation: 'Nenhum veículo registrado. Verifique se há veículos não contabilizados.',
   },
+}
+
+const normalizeStr = (str: string) => {
+  return str
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
 }
 
 const parseBalance = (val: unknown): number => {
@@ -157,10 +137,10 @@ const parseBalance = (val: unknown): number => {
 }
 
 const categorizeAccount = (name: string, code: string): AssetCategory | null => {
-  const lowerName = name.toLowerCase()
-  const lowerCode = code.toLowerCase()
+  const normName = normalizeStr(name)
+  const normCode = normalizeStr(code)
   for (const [cat, config] of Object.entries(CATEGORY_CONFIG)) {
-    if (config.keywords.some((kw) => lowerName.includes(kw) || lowerCode.includes(kw))) {
+    if (config.keywords.some((kw) => normName.includes(kw) || normCode.includes(kw))) {
       return cat as AssetCategory
     }
   }
@@ -175,7 +155,7 @@ export const getAssetsByCategory = async (projectId: string): Promise<CategoryRe
   if (!projectId) return []
 
   const balances = await pb.collection('account_balances').getFullList<AccountBalance>({
-    filter: `project_id = "${projectId}" && type = "asset"`,
+    filter: `project_id = "${projectId}" && (type = "asset" || name ~ "ativo")`,
     sort: 'code',
   })
 
