@@ -339,20 +339,21 @@ export default function Projects() {
               ))}
             </div>
           ) : filteredProjects.length === 0 ? (
-            <div className="text-center py-12 flex flex-col items-center">
+            <div className="text-center py-16 px-4 flex flex-col items-center justify-center border-2 border-dashed border-muted-foreground/20 rounded-xl bg-muted/10 max-w-3xl mx-auto mt-4">
               <img
-                src="https://img.usecurling.com/p/300/200?q=empty%20desk&color=blue"
-                alt="No projects"
-                className="mb-6 rounded-lg opacity-80"
+                src="https://img.usecurling.com/p/400/300?q=organized%20workspace"
+                alt="Nenhum projeto encontrado"
+                className="mb-8 rounded-lg shadow-sm w-full max-w-[280px] object-cover"
               />
-              <h3 className="text-lg font-medium text-foreground mb-2">
+              <h3 className="text-xl font-semibold text-foreground mb-2">
                 Nenhum projeto encontrado
               </h3>
-              <p className="text-muted-foreground mb-6 max-w-sm text-center">
-                Você ainda não possui projetos de auditoria. Crie seu primeiro projeto para começar.
+              <p className="text-muted-foreground mb-8 max-w-md text-center">
+                Você ainda não possui projetos de auditoria. Comece criando seu primeiro projeto
+                para gerenciar seus dados.
               </p>
-              <Button onClick={() => setIsCreateOpen(true)}>
-                <Plus className="h-4 w-4 mr-2" /> Criar seu primeiro projeto
+              <Button onClick={() => setIsCreateOpen(true)} size="lg" className="gap-2">
+                <Plus className="h-4 w-4" /> Novo Projeto
               </Button>
             </div>
           ) : (
