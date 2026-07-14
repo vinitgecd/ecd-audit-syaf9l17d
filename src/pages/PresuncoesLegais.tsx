@@ -1,11 +1,5 @@
-import { useState, useEffect, lazy, Suspense } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
-
-const HiddenAssetsPresumption = lazy(() =>
-  import('@/components/HiddenAssetsPresumption').then((m) => ({
-    default: m.HiddenAssetsPresumption,
-  })),
-)
 import { useNegativeCashBalances } from '@/hooks/use-negative-cash-balances'
 import { useRealtime } from '@/hooks/use-realtime'
 import { useAuth } from '@/hooks/use-auth'
@@ -342,13 +336,6 @@ export default function PresuncoesLegais() {
           )}
         </CardContent>
       </Card>
-
-      <div className="space-y-3">
-        <h2 className="text-xl font-semibold tracking-tight">Presunção 2: Ativo Oculto</h2>
-        <Suspense fallback={null}>
-          <HiddenAssetsPresumption projectId={projectId} />
-        </Suspense>
-      </div>
     </div>
   )
 }
