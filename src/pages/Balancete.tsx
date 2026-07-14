@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback, useRef, useDeferredValue } from 'react'
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useDatabase } from '@/contexts/DatabaseContext'
 import {
@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Loader2,
   AlertCircle,
-  Trash2,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -53,34 +52,29 @@ export default function Balancete() {
     setExpandedGroups,
     loadChildren,
     loadedChildren,
+    progressText,
+    isBackgroundLoading,
+    isTimeout,
   } = useAccountingStore()
 
   const [searchTerm, setSearchTerm] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
-
   const [category, setCategory] = useState<string>('all')
-
   const [maxNivel, setMaxNivel] = useState('5')
   const [debouncedNivel, setDebouncedNivel] = useState('5')
-
   const [childLoadingId, setChildLoadingId] = useState<string | null>(null)
-
-  const { isReady, error: dbError } = useDatabase()
+  const { isReady } = useDatabase()
 
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(searchTerm)
       setDebouncedNivel(maxNivel)
-    }, 500)
+    }, 300)
     return () => clearTimeout(timer)
   }, [searchTerm, maxNivel])
 
-  // Virtualization constants and state
   const ROW_HEIGHT = 40
-  const MathMax = Math.max
-  const MathMin = Math.min
   const OVERSCAN = 15
-
   const [scrollTop, setScrollTop] = useState(0)
   const [containerHeight, setContainerHeight] = useState(600)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -88,9 +82,7 @@ export default function Balancete() {
   useEffect(() => {
     if (!containerRef.current) return
     const resizeObserver = new ResizeObserver((entries) => {
-      if (entries[0]) {
-        setContainerHeight(entries[0].contentRect.height)
-      }
+      if (entries[0]) setContainerHeight(entries[0].contentRect.height)
     })
     resizeObserver.observe(containerRef.current)
     return () => resizeObserver.disconnect()
@@ -109,13 +101,11 @@ export default function Balancete() {
   const toggleGroup = useCallback(
     async (id: string, e: React.MouseEvent) => {
       e.stopPropagation()
-
       if (!expandedGroups[id] && !loadedChildren[id] && projectId) {
         setChildLoadingId(id)
         await loadChildren(projectId, id)
         setChildLoadingId(null)
       }
-
       setExpandedGroups((prev) => ({ ...prev, [id]: !prev[id] }))
     },
     [setExpandedGroups, expandedGroups, loadedChildren, projectId, loadChildren],
@@ -123,25 +113,16 @@ export default function Balancete() {
 
   const isLoadingData = loading || isProcessing
   const [showSlowWarning, setShowSlowWarning] = useState(false)
-  const [hasTimeout, setHasTimeout] = useState(false)
 
   useEffect(() => {
     let timer: NodeJS.Timeout
-    let timeoutTimer: NodeJS.Timeout
-
     if (isLoadingData) {
       setShowSlowWarning(false)
-      setHasTimeout(false)
       timer = setTimeout(() => setShowSlowWarning(true), 2000)
-      timeoutTimer = setTimeout(() => setHasTimeout(true), 15000)
     } else {
       setShowSlowWarning(false)
-      setHasTimeout(false)
     }
-    return () => {
-      clearTimeout(timer)
-      clearTimeout(timeoutTimer)
-    }
+    return () => clearTimeout(timer)
   }, [isLoadingData])
 
   const processedData = processedBalancete?.data || []
@@ -149,13 +130,10 @@ export default function Balancete() {
 
   const filteredData = useMemo(() => {
     const maxLevel = parseInt(debouncedNivel || '5', 10)
-
     return processedData.filter((row) => {
       const matchesCategory =
         category === 'all' || row.categoria.toLowerCase() === category.toLowerCase()
-
       const matchesLevel = row.nivel <= maxLevel
-
       let isVisible = true
       if (!debouncedSearch) {
         let curr = row.parent_id
@@ -167,7 +145,6 @@ export default function Balancete() {
           curr = parentMap.get(curr)
         }
       }
-
       return matchesCategory && isVisible && matchesLevel
     })
   }, [processedData, parentMap, debouncedSearch, category, expandedGroups, debouncedNivel])
@@ -180,15 +157,14 @@ export default function Balancete() {
     return ''
   }
 
-  const startIndex = MathMax(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
-  const endIndex = MathMin(
+  const startIndex = Math.max(0, Math.floor(scrollTop / ROW_HEIGHT) - OVERSCAN)
+  const endIndex = Math.min(
     filteredData.length - 1,
     Math.floor((scrollTop + containerHeight) / ROW_HEIGHT) + OVERSCAN,
   )
-
   const visibleRows = filteredData.slice(startIndex, endIndex + 1)
   const topSpacerHeight = startIndex * ROW_HEIGHT
-  const bottomSpacerHeight = MathMax(0, (filteredData.length - 1 - endIndex) * ROW_HEIGHT)
+  const bottomSpacerHeight = Math.max(0, (filteredData.length - 1 - endIndex) * ROW_HEIGHT)
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-8rem)]">
@@ -196,7 +172,6 @@ export default function Balancete() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
           <h2 className="text-lg font-bold text-foreground">Balancete Hierárquico</h2>
         </div>
-
         <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 w-full sm:w-auto">
           <div className="flex items-center gap-1 bg-muted p-1 rounded-md">
             <Button variant="ghost" size="icon" className="h-8 w-8" title="Exportar PDF">
@@ -214,7 +189,6 @@ export default function Balancete() {
               <FileDown className="h-4 w-4" />
             </Button>
           </div>
-
           <div className="flex items-center gap-2 border-l pl-2 ml-2">
             <span className="text-sm text-muted-foreground whitespace-nowrap">Níveis:</span>
             <Input
@@ -228,7 +202,7 @@ export default function Balancete() {
         </div>
       </div>
 
-      <div className="flex gap-4 items-center">
+      <div className="flex gap-4 items-center flex-wrap">
         <div className="relative w-72">
           <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
@@ -256,6 +230,26 @@ export default function Balancete() {
         </div>
       </div>
 
+      {(isTimeout || isBackgroundLoading) && (
+        <div
+          className={cn(
+            'border rounded-md p-3 flex items-center gap-2',
+            isTimeout ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200',
+          )}
+        >
+          {isTimeout ? (
+            <AlertCircle className="h-5 w-5 text-amber-600 shrink-0" />
+          ) : (
+            <Loader2 className="h-5 w-5 text-blue-600 shrink-0 animate-spin" />
+          )}
+          <p className={cn('text-sm', isTimeout ? 'text-amber-800' : 'text-blue-800')}>
+            {isTimeout
+              ? 'O carregamento está demorando. Dados parciais carregados. Aguarde...'
+              : progressText || 'Carregando registros restantes...'}
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
         <div
           ref={containerRef}
@@ -278,49 +272,13 @@ export default function Balancete() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {hasTimeout || error?.message === 'TIMEOUT' ? (
-                <TableRow>
-                  <TableCell colSpan={10} className="h-[400px] text-center">
-                    <div className="flex flex-col items-center justify-center gap-4">
-                      <AlertCircle className="h-10 w-10 text-destructive" />
-                      <p className="text-lg font-medium text-foreground">
-                        O carregamento dos dados está demorando muito.
-                      </p>
-                      <p className="text-sm text-muted-foreground max-w-md">
-                        Isso pode acontecer com projetos com um grande volume de dados. Você pode
-                        tentar carregar novamente ou ir para as configurações para limpar os dados
-                        se o problema persistir.
-                      </p>
-                      <div className="flex items-center gap-3 mt-2">
-                        <Button
-                          variant="outline"
-                          onClick={() => {
-                            if (projectId) loadBalancete(projectId, 0, debouncedSearch)
-                          }}
-                        >
-                          <RefreshCw className="mr-2 h-4 w-4" />
-                          Tentar Novamente
-                        </Button>
-                        <Button
-                          variant="destructive"
-                          onClick={() => projectId && resetProject(projectId)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Resetar Projeto
-                        </Button>
-                      </div>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ) : isLoadingData ? (
+              {isLoadingData && processedData.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={10} className="h-[400px] text-center">
                     <div className="flex flex-col items-center justify-center gap-4">
                       <Loader2 className="h-10 w-10 animate-spin text-primary" />
                       <p className="text-lg font-medium text-foreground">
-                        {loading
-                          ? 'Buscando dados no servidor...'
-                          : 'Processando árvore do balancete...'}
+                        {progressText || 'Buscando dados no servidor...'}
                       </p>
                       {showSlowWarning ? (
                         <p className="text-sm font-medium text-amber-600 animate-pulse bg-amber-50 p-2 rounded-md max-w-md mx-auto">
@@ -329,15 +287,13 @@ export default function Balancete() {
                         </p>
                       ) : (
                         <p className="text-sm text-muted-foreground">
-                          {loading
-                            ? 'Aguardando resposta do servidor'
-                            : 'Calculando totais e totalizadores'}
+                          Aguardando resposta do servidor
                         </p>
                       )}
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : error && error.message !== 'TIMEOUT' ? (
+              ) : error && !isTimeout ? (
                 <TableRow>
                   <TableCell colSpan={10} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center text-muted-foreground gap-4">

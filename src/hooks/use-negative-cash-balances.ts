@@ -27,7 +27,13 @@ export function useNegativeCashBalances(projectId: string, perPage: number = 50)
     }
     setLoading(true)
     try {
-      const entries = await getNegativeCashBalanceEntries(projectId)
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error('TIMEOUT')), 60000)
+      })
+      const entries = (await Promise.race([
+        getNegativeCashBalanceEntries(projectId),
+        timeoutPromise,
+      ])) as CashBalanceEntry[]
       setAllEntries(entries)
     } catch (e) {
       console.error('Failed to load negative cash balance entries:', e)

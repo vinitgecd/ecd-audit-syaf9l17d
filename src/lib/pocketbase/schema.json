@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-14T13:07:13.685Z",
+  "generatedAt": "2026-07-14T18:30:53.468Z",
   "collections": [
     {
       "name": "users",
@@ -365,7 +365,8 @@
       "indexes": [
         "CREATE INDEX idx_accounts_project ON accounts (project_id)",
         "CREATE INDEX idx_accounts_code ON accounts (code)",
-        "CREATE INDEX `idx_accounts_parent_id` ON `accounts` (parent_id)"
+        "CREATE INDEX `idx_accounts_parent_id` ON `accounts` (parent_id)",
+        "CREATE INDEX `idx_accounts_project_code` ON `accounts` (project_id,code)"
       ]
     },
     {

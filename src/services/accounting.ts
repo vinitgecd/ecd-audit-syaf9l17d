@@ -259,6 +259,54 @@ export const getAccountBalancesByIds = async (projectId: string, search: string)
   }
 }
 
+export interface BalanceteResult {
+  records: AccountBalance[]
+  total: number
+  hasMore: boolean
+}
+
+export const getBalancete = async (
+  projectId: string,
+  options?: {
+    pageSize?: number
+    offset?: number
+    level?: number
+    search?: string
+  },
+): Promise<BalanceteResult> => {
+  try {
+    if (!projectId) throw new Error('Project ID is required')
+    const pageSize = options?.pageSize ?? 100
+    const offset = options?.offset ?? 0
+    const page = Math.floor(offset / pageSize) + 1
+
+    let filter = `project_id = "${projectId}"`
+    if (options?.level) filter += ` && level = ${options.level}`
+    if (options?.search) {
+      const s = options.search.replace(/"/g, '\\"')
+      filter += ` && (code ~ "${s}" || name ~ "${s}")`
+    }
+
+    const result = await safeCollection('account_balances').getList<AccountBalance>(
+      page,
+      pageSize,
+      {
+        filter,
+        sort: 'code',
+      },
+    )
+
+    return {
+      records: result.items,
+      total: result.totalItems,
+      hasMore: offset + result.items.length < result.totalItems,
+    }
+  } catch (error) {
+    console.error('Error in getBalancete:', error)
+    throw error
+  }
+}
+
 export const getAccountEntriesPaginated = async (
   accountId: string,
   projectId: string,

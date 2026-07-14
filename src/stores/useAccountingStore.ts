@@ -5,11 +5,9 @@ import {
   getAccounts,
   getEntryItems,
   AccountBalance,
-  getAccountBalances,
-  getRootAccountBalances,
   getChildAccountBalances,
-  getAccountBalancesByIds,
   resetProjectData,
+  getBalancete,
 } from '@/services/accounting'
 import { useRealtime } from '@/hooks/use-realtime'
 import { toast } from 'sonner'
@@ -37,8 +35,8 @@ interface ProcessedAnalysis {
   liquidezCorrente: string
   endividamento: string
   margemLiquida: string
-  monthlyData: any[]
-  balanceData: any[]
+  monthlyData: Array<{ name: string; receitas: number; despesas: number }>
+  balanceData: Array<{ name: string; circulante: number; naocirculante: number }>
 }
 
 interface AccountingState {
@@ -54,6 +52,9 @@ interface AccountingState {
   isProcessing: boolean
   hasLoaded: boolean
   error: Error | null
+  progressText: string
+  isBackgroundLoading: boolean
+  isTimeout: boolean
   loadData: (projectId: string, force?: boolean) => Promise<void>
   loadBalancete: (projectId: string, level: number, search: string) => Promise<void>
   loadChildren: (projectId: string, parentId: string) => Promise<void>
@@ -107,7 +108,11 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   const [isProcessing, setIsProcessing] = useState(false)
   const [hasLoaded, setHasLoaded] = useState(false)
   const [error, setError] = useState<Error | null>(null)
+  const [progressText, setProgressText] = useState('')
+  const [isBackgroundLoading, setIsBackgroundLoading] = useState(false)
+  const [isTimeout, setIsTimeout] = useState(false)
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const lastProgressUpdateRef = useRef<number>(0)
 
   const resetProject = useCallback(async (id: string) => {
     try {
@@ -126,52 +131,132 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
     }
   }, [])
 
-  const loadBalancete = useCallback(async (id: string, level: number, search: string) => {
+  const loadBalancete = useCallback(async (id: string, _level: number, search: string) => {
+    if (fetchTimeoutRef.current) {
+      clearTimeout(fetchTimeoutRef.current)
+      fetchTimeoutRef.current = null
+    }
+
     setLoading(true)
     setError(null)
+    setIsTimeout(false)
+    setProgressText('Buscando dados no servidor...')
 
-    const timeoutPromise = new Promise((_, reject) => {
-      fetchTimeoutRef.current = setTimeout(() => {
-        reject(new Error('TIMEOUT'))
-      }, 120000)
-    })
+    const queryLevel = search ? undefined : 1
 
     try {
-      let fetchPromise
-      if (search) {
-        fetchPromise = getAccountBalancesByIds(id, search)
-      } else {
-        fetchPromise = getRootAccountBalances(id)
-      }
-
-      const balances = (await Promise.race([fetchPromise, timeoutPromise])) as AccountBalance[]
-
-      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current)
+      const firstPage = await getBalancete(id, {
+        pageSize: 100,
+        offset: 0,
+        level: queryLevel,
+        search: search || undefined,
+      })
 
       setProjectId(id)
       setIsProcessing(true)
+      setProgressText(`Carregando registros 0 de ${firstPage.total}...`)
 
-      setTimeout(() => {
+      await new Promise<void>((resolve) => {
+        setTimeout(() => {
+          try {
+            const balancete = processBalancete(firstPage.records)
+            setProcessedBalancete(balancete)
+            setExpandedGroups({})
+            setLoadedChildren({})
+            setHasLoaded(true)
+            setProgressText(
+              `Carregando registros ${firstPage.records.length} de ${firstPage.total}...`,
+            )
+          } catch (err) {
+            console.error('Processing error', err)
+            setError(err instanceof Error ? err : new Error('Erro ao processar dados'))
+          } finally {
+            setIsProcessing(false)
+            setLoading(false)
+          }
+          resolve()
+        }, 10)
+      })
+
+      if (firstPage.hasMore) {
+        setIsBackgroundLoading(true)
+        lastProgressUpdateRef.current = Date.now()
+
         try {
-          const balancete = processBalancete(balances)
-          setProcessedBalancete(balancete)
-          setExpandedGroups({})
-          setLoadedChildren({})
-          setHasLoaded(true)
-        } catch (err) {
-          console.error('Processing error', err)
-          setError(err instanceof Error ? err : new Error('Failed to process data'))
+          const allRecords = [...firstPage.records]
+          let currentOffset = firstPage.records.length
+
+          while (currentOffset < firstPage.total) {
+            const batchPromise = getBalancete(id, {
+              pageSize: 100,
+              offset: currentOffset,
+              level: queryLevel,
+              search: search || undefined,
+            })
+
+            const timeoutPromise = new Promise<never>((_, reject) => {
+              fetchTimeoutRef.current = setTimeout(() => {
+                reject(new Error('TIMEOUT'))
+              }, 120000)
+            })
+
+            const batch = await Promise.race([batchPromise, timeoutPromise])
+
+            if (fetchTimeoutRef.current) {
+              clearTimeout(fetchTimeoutRef.current)
+              fetchTimeoutRef.current = null
+            }
+
+            if (batch.records.length === 0) break
+
+            allRecords.push(...batch.records)
+            currentOffset = allRecords.length
+
+            const now = Date.now()
+            if (now - lastProgressUpdateRef.current >= 500 || !batch.hasMore) {
+              setProgressText(`Carregando registros ${currentOffset} de ${firstPage.total}...`)
+              lastProgressUpdateRef.current = now
+            }
+
+            if (!batch.hasMore) break
+          }
+
+          const fullBalancete = processBalancete(allRecords)
+          setProcessedBalancete(fullBalancete)
+          setProgressText('')
+        } catch (e) {
+          if (fetchTimeoutRef.current) {
+            clearTimeout(fetchTimeoutRef.current)
+            fetchTimeoutRef.current = null
+          }
+
+          if (e instanceof Error && e.message === 'TIMEOUT') {
+            setIsTimeout(true)
+            toast.info('Carregando dados restantes em background...')
+            setProgressText('')
+          } else {
+            console.error(e)
+            const errMsg = e instanceof Error ? e.message : 'Erro ao carregar balancete'
+            setError(new Error(errMsg))
+            setProgressText('')
+          }
         } finally {
-          setIsProcessing(false)
-          setLoading(false)
+          setIsBackgroundLoading(false)
         }
-      }, 10)
-    } catch (e: any) {
-      if (fetchTimeoutRef.current) clearTimeout(fetchTimeoutRef.current)
+      } else {
+        setProgressText('')
+      }
+    } catch (e) {
+      if (fetchTimeoutRef.current) {
+        clearTimeout(fetchTimeoutRef.current)
+        fetchTimeoutRef.current = null
+      }
       console.error(e)
-      setError(e instanceof Error ? e : new Error(e.message || 'Failed to load balancete data'))
+      const errMsg = e instanceof Error ? e.message : 'Erro ao carregar balancete'
+      setError(new Error(errMsg))
       setLoading(false)
       setIsProcessing(false)
+      setProgressText('')
     }
   }, [])
 
@@ -226,7 +311,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         let totalDespesas = 0
 
         const accountBalances: Record<string, number> = {}
-        const accMap = new Map()
+        const accMap = new Map<string, Account>()
         accs.forEach((a) => accMap.set(a.id, a))
 
         entryItems.forEach((item) => {
@@ -338,6 +423,9 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         isProcessing,
         hasLoaded,
         error,
+        progressText,
+        isBackgroundLoading,
+        isTimeout,
         loadData,
         loadBalancete,
         loadChildren,
