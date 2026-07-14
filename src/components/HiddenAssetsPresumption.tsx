@@ -66,33 +66,41 @@ function AssetCategoryCard({ cat }: { cat: CategoryResult }) {
       </div>
 
       {cat.found ? (
-        <Accordion type="single" collapsible className="mt-3">
-          <AccordionItem value={cat.category} className="border-0">
-            <AccordionTrigger className="text-xs text-muted-foreground py-2 hover:no-underline">
-              Ver detalhes ({cat.accountCount} {cat.accountCount === 1 ? 'conta' : 'contas'})
-            </AccordionTrigger>
-            <AccordionContent>
-              <div className="space-y-1 pt-1">
-                {cat.accounts.map((acc) => (
-                  <div
-                    key={acc.id}
-                    className="flex items-center justify-between text-sm py-1.5 border-b border-border/50 last:border-0"
-                  >
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-mono text-xs text-muted-foreground shrink-0">
-                        {acc.code}
+        <>
+          <Accordion type="single" collapsible className="mt-3">
+            <AccordionItem value={cat.category} className="border-0">
+              <AccordionTrigger className="text-xs text-muted-foreground py-2 hover:no-underline">
+                Ver detalhes ({cat.accountCount} {cat.accountCount === 1 ? 'conta' : 'contas'})
+              </AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-1 pt-1">
+                  {cat.accounts.map((acc) => (
+                    <div
+                      key={acc.id}
+                      className="flex items-center justify-between text-sm py-1.5 border-b border-border/50 last:border-0"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="font-mono text-xs text-muted-foreground shrink-0">
+                          {acc.code}
+                        </span>
+                        <span className="truncate">{acc.name}</span>
+                      </div>
+                      <span className="font-mono text-xs shrink-0 ml-2">
+                        {fmtCurrency(acc.balance)}
                       </span>
-                      <span className="truncate">{acc.name}</span>
                     </div>
-                    <span className="font-mono text-xs shrink-0 ml-2">
-                      {fmtCurrency(acc.balance)}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </AccordionContent>
-          </AccordionItem>
-        </Accordion>
+                  ))}
+                </div>
+              </AccordionContent>
+            </AccordionItem>
+          </Accordion>
+          {!cat.hasBalance && (
+            <div className="flex items-center gap-2 mt-2 text-xs text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-3.5 w-3.5" />
+              <span>Saldo zero identificado — verifique se há registros não contabilizados</span>
+            </div>
+          )}
+        </>
       ) : (
         <div className="flex items-center gap-2 mt-3 text-sm text-muted-foreground">
           <AlertTriangle className="h-4 w-4 text-amber-500" />
