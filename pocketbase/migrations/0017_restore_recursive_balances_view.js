@@ -14,12 +14,13 @@ migrate(
       listRule: "@request.auth.id != '' && project_id.user_id = @request.auth.id",
       viewRule: "@request.auth.id != '' && project_id.user_id = @request.auth.id",
       viewQuery: `WITH RECURSIVE
-      account_tree(root_id, child_id) AS (
-        SELECT id, id FROM accounts
+      account_tree(root_id, child_id, depth) AS (
+        SELECT id, id, 0 FROM accounts
         UNION ALL
-        SELECT t.root_id, a.id
+        SELECT t.root_id, a.id, t.depth + 1
         FROM account_tree t
         JOIN accounts a ON a.parent_id = t.child_id
+        WHERE t.depth < 10
       ),
       rollup AS (
         SELECT t.root_id as account_id,
@@ -43,7 +44,13 @@ migrate(
         },
         { name: 'code', type: 'text', required: false },
         { name: 'name', type: 'text', required: false },
-        { name: 'type', type: 'text', required: false },
+        {
+          name: 'type',
+          type: 'select',
+          required: false,
+          values: ['asset', 'liability', 'equity', 'revenue', 'expense'],
+          maxSelect: 1,
+        },
         {
           name: 'parent_id',
           type: 'relation',
@@ -54,8 +61,8 @@ migrate(
         { name: 'level', type: 'number', required: false },
         { name: 'nature', type: 'text', required: false },
         { name: 'is_group', type: 'bool', required: false },
-        { name: 'total_debits', type: 'number', required: false },
-        { name: 'total_credits', type: 'number', required: false },
+        { name: 'total_debits', type: 'json', required: false },
+        { name: 'total_credits', type: 'json', required: false },
         { name: 'created', type: 'autodate', required: false, onCreate: true, onUpdate: false },
         { name: 'updated', type: 'autodate', required: false, onCreate: true, onUpdate: true },
       ],
