@@ -64,8 +64,8 @@ const AccountingContext = createContext<AccountingState | undefined>(undefined)
 
 const processBalancete = (balances: AccountBalance[]): ProcessedBalancete => {
   const finalRows = balances.map((acc) => {
-    const totalDebitos = acc.total_debits || 0
-    const totalCreditos = acc.total_credits || 0
+    const totalDebitos = Number(acc.total_debits) || 0
+    const totalCreditos = Number(acc.total_credits) || 0
     const saldoInicial = 0
 
     let balanceValue = totalDebitos - totalCreditos
@@ -139,7 +139,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
     try {
       let fetchPromise
       if (search) {
-        fetchPromise = getAccountBalancesByIds(id, search).then((res) => res.items)
+        fetchPromise = getAccountBalancesByIds(id, search)
       } else {
         fetchPromise = getRootAccountBalances(id)
       }

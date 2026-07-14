@@ -249,7 +249,7 @@ export const getAccountBalancesByIds = async (projectId: string, search: string)
       const s = search.replace(/"/g, '\\"')
       filter += ` && (code ~ "${s}" || name ~ "${s}")`
     }
-    return await safeCollection('account_balances').getList<AccountBalance>(1, 200, {
+    return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter,
       sort: 'code',
     })
