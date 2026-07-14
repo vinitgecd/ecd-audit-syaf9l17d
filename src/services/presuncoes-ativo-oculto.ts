@@ -1,7 +1,7 @@
 import pb from '@/lib/pocketbase/client'
 import type { AccountBalance } from '@/services/accounting'
 
-export type AssetCategory = 'imoveis' | 'aplicacoes' | 'estoques' | 'veiculos'
+export type AssetCategory = 'imoveis' | 'aplicacoes' | 'estoques' | 'veiculos' | 'outros'
 
 export interface CategoryAccount {
   id: string
@@ -34,86 +34,46 @@ export interface RiskAssessment {
 
 interface CategoryConfig {
   label: string
-  keywords: string[]
+  prefixes: string[]
   recommendation: string
 }
 
 const CATEGORY_CONFIG: Record<AssetCategory, CategoryConfig> = {
   imoveis: {
     label: 'Imóveis',
-    keywords: [
-      'imovel',
-      'terreno',
-      'edificacao',
-      'edificio',
-      'predio',
-      'propriedade',
-      'construcao',
-      'benfeitoria',
-      'obra em andamento',
-      'instalacao',
-      'propriedade de investimento',
-    ],
-    recommendation: 'Nenhum imóvel registrado. Verifique se há propriedades não contabilizadas.',
+    prefixes: ['1.1.1'],
+    recommendation:
+      'Nenhum saldo registrado em Imóveis. Verifique se há propriedades não contabilizadas.',
   },
   aplicacoes: {
     label: 'Aplicações Financeiras',
-    keywords: [
-      'aplicacao',
-      'investimento',
-      'fundo',
-      'renda fixa',
-      'cdb',
-      'rdb',
-      'tesouro',
-      'poupanca',
-      'titulo',
-      'debenture',
-      'liquidez',
-    ],
+    prefixes: ['1.1.2'],
     recommendation:
-      'Nenhuma aplicação financeira registrada. Verifique se há investimentos não contabilizados.',
+      'Nenhum saldo registrado em Aplicações Financeiras. Verifique se há investimentos não contabilizados.',
   },
   estoques: {
     label: 'Estoques',
-    keywords: [
-      'estoque',
-      'mercadoria',
-      'produto',
-      'inventario',
-      'almoxarifado',
-      'materia-prima',
-      'materia prima',
-      'insumo',
-    ],
-    recommendation: 'Nenhum estoque registrado. Verifique se há inventários não contabilizados.',
+    prefixes: ['1.1.3'],
+    recommendation:
+      'Nenhum saldo registrado em Estoques. Verifique se há inventários não contabilizados.',
   },
   veiculos: {
     label: 'Veículos',
-    keywords: [
-      'veiculo',
-      'automovel',
-      'caminhao',
-      'moto',
-      'frota',
-      'carro',
-      'trator',
-      'reboque',
-      'semitrator',
-      'maquina',
-      'implemento',
-      'utilitario',
-    ],
-    recommendation: 'Nenhum veículo registrado. Verifique se há veículos não contabilizados.',
+    prefixes: ['1.1.4'],
+    recommendation:
+      'Nenhum saldo registrado em Veículos. Verifique se há veículos não contabilizados.',
+  },
+  outros: {
+    label: 'Outros',
+    prefixes: [],
+    recommendation:
+      'Nenhum saldo registrado em Outros Ativos. Verifique se há outros ativos não contabilizados.',
   },
 }
 
-const normalizeStr = (str: string) => {
-  return str
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-}
+const CATEGORY_ORDER: AssetCategory[] = ['imoveis', 'aplicacoes', 'estoques', 'veiculos', 'outros']
+
+const normalizeCode = (code: string): string => code.trim().toLowerCase()
 
 const parseBalance = (val: unknown): number => {
   if (val === null || val === undefined) return 0
@@ -136,40 +96,40 @@ const parseBalance = (val: unknown): number => {
   return 0
 }
 
-const categorizeAccount = (name: string, code: string): AssetCategory | null => {
-  const normName = normalizeStr(name)
-  const normCode = normalizeStr(code)
-  for (const [cat, config] of Object.entries(CATEGORY_CONFIG)) {
-    if (config.keywords.some((kw) => normName.includes(kw) || normCode.includes(kw))) {
-      return cat as AssetCategory
+const categorizeByCode = (code: string): AssetCategory => {
+  const norm = normalizeCode(code)
+  for (const cat of CATEGORY_ORDER) {
+    if (cat === 'outros') continue
+    const config = CATEGORY_CONFIG[cat]
+    if (config.prefixes.some((prefix) => norm.startsWith(normalizeCode(prefix)))) {
+      return cat
     }
   }
-  return null
-}
-
-interface CategorizedAccount extends CategoryAccount {
-  parentId: string | null
+  return 'outros'
 }
 
 export const getAssetsByCategory = async (projectId: string): Promise<CategoryResult[]> => {
   if (!projectId) return []
 
   const balances = await pb.collection('account_balances').getFullList<AccountBalance>({
-    filter: `project_id = "${projectId}" && (type = "asset" || name ~ "ativo")`,
+    filter: `project_id = "${projectId}" && type = "asset"`,
     sort: 'code',
   })
 
-  const categorized: Record<AssetCategory, CategorizedAccount[]> = {
+  const detailAccounts = balances.filter(
+    (bal) => !bal.is_group && bal.code && normalizeCode(bal.code).startsWith('1'),
+  )
+
+  const categorized: Record<AssetCategory, CategoryAccount[]> = {
     imoveis: [],
     aplicacoes: [],
     estoques: [],
     veiculos: [],
+    outros: [],
   }
 
-  for (const bal of balances) {
-    const category = categorizeAccount(bal.name, bal.code)
-    if (!category) continue
-
+  for (const bal of detailAccounts) {
+    const category = categorizeByCode(bal.code)
     const debits = parseBalance(bal.total_debits)
     const credits = parseBalance(bal.total_credits)
     const balance = debits - credits
@@ -179,19 +139,11 @@ export const getAssetsByCategory = async (projectId: string): Promise<CategoryRe
       code: bal.code,
       name: bal.name,
       balance,
-      parentId: bal.parent_id ?? null,
     })
   }
 
-  return (Object.keys(CATEGORY_CONFIG) as AssetCategory[]).map((cat) => {
-    const allAccounts = categorized[cat]
-
-    const categoryIds = new Set(allAccounts.map((a) => a.id))
-    const topLevel = allAccounts.filter((acc) => !acc.parentId || !categoryIds.has(acc.parentId))
-
-    const accounts = topLevel
-      .map(({ id, code, name, balance }) => ({ id, code, name, balance }))
-      .sort((a, b) => a.code.localeCompare(b.code))
+  return CATEGORY_ORDER.map((cat) => {
+    const accounts = categorized[cat].slice().sort((a, b) => a.code.localeCompare(b.code))
 
     const totalBalance = accounts.reduce((sum, a) => sum + a.balance, 0)
 
@@ -201,8 +153,8 @@ export const getAssetsByCategory = async (projectId: string): Promise<CategoryRe
       totalBalance,
       accountCount: accounts.length,
       accounts,
-      found: allAccounts.length > 0,
-      hasBalance: totalBalance !== 0,
+      found: accounts.length > 0,
+      hasBalance: totalBalance > 0,
     }
   })
 }
@@ -211,7 +163,7 @@ export const detectMissingAssets = (categories: CategoryResult[]): RiskAssessmen
   const missing: MissingAssetInfo[] = []
 
   for (const cat of categories) {
-    if (!cat.found || !cat.hasBalance) {
+    if (cat.totalBalance === 0) {
       missing.push({
         category: cat.category,
         label: cat.label,
