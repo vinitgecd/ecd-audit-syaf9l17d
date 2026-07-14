@@ -13,27 +13,17 @@ migrate(
       type: 'view',
       listRule: "@request.auth.id != '' && project_id.user_id = @request.auth.id",
       viewRule: "@request.auth.id != '' && project_id.user_id = @request.auth.id",
-      viewQuery: `WITH RECURSIVE
-      account_tree(root_id, child_id, depth) AS (
-        SELECT id, id, 0 FROM accounts
-        UNION ALL
-        SELECT t.root_id, a.id, t.depth + 1
-        FROM account_tree t
-        JOIN accounts a ON a.parent_id = t.child_id
-        WHERE t.depth < 20
-      ),
-      rollup AS (
-        SELECT t.root_id as account_id,
-               COALESCE(SUM(CASE WHEN ei.type = 'debit' THEN ei.value ELSE 0 END), 0) as total_debits,
-               COALESCE(SUM(CASE WHEN ei.type = 'credit' THEN ei.value ELSE 0 END), 0) as total_credits
-        FROM account_tree t
-        LEFT JOIN entry_items ei ON ei.account_id = t.child_id
-        GROUP BY t.root_id
-      )
-      SELECT a.id, a.project_id, a.code, a.name, a.type, a.parent_id, a.level, a.nature, a.is_group, a.referential_code, a.created, a.updated,
-             r.total_debits as total_debits, r.total_credits as total_credits
-      FROM accounts a
-      LEFT JOIN rollup r ON r.account_id = a.id`,
+      viewQuery: `SELECT a.id, a.project_id, a.code, a.name, a.type, a.parent_id, a.level, a.nature, a.is_group, a.referential_code, a.created, a.updated,
+       COALESCE(r.total_debits, 0) as total_debits,
+       COALESCE(r.total_credits, 0) as total_credits
+FROM accounts a
+LEFT JOIN (
+  SELECT account_id,
+         SUM(CASE WHEN type = 'debit' THEN value ELSE 0 END) as total_debits,
+         SUM(CASE WHEN type = 'credit' THEN value ELSE 0 END) as total_credits
+  FROM entry_items
+  GROUP BY account_id
+) r ON r.account_id = a.id`,
       fields: [
         {
           name: 'project_id',
