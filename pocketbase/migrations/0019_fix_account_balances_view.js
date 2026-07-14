@@ -13,27 +13,10 @@ migrate(
       type: 'view',
       listRule: "@request.auth.id != '' && project_id.user_id = @request.auth.id",
       viewRule: "@request.auth.id != '' && project_id.user_id = @request.auth.id",
-      viewQuery: `WITH RECURSIVE
-      account_tree(root_id, child_id, depth) AS (
-        SELECT id, id, 0 FROM accounts
-        UNION ALL
-        SELECT t.root_id, a.id, t.depth + 1
-        FROM account_tree t
-        JOIN accounts a ON a.parent_id = t.child_id
-        WHERE t.depth < 10
-      ),
-      rollup AS (
-        SELECT t.root_id as account_id,
-               COALESCE(SUM(CASE WHEN ei.type = 'debit' THEN ei.value ELSE 0 END), 0) as total_debits,
-               COALESCE(SUM(CASE WHEN ei.type = 'credit' THEN ei.value ELSE 0 END), 0) as total_credits
-        FROM account_tree t
-        LEFT JOIN entry_items ei ON ei.account_id = t.child_id
-        GROUP BY t.root_id
-      )
-      SELECT a.id, a.project_id, a.code, a.name, a.type, a.parent_id, a.level, a.nature, a.is_group, a.created, a.updated,
-             COALESCE(r.total_debits, 0) as total_debits, COALESCE(r.total_credits, 0) as total_credits
-      FROM accounts a
-      LEFT JOIN rollup r ON r.account_id = a.id`,
+      viewQuery: `SELECT a.id, a.project_id, a.code, a.name, a.type, a.parent_id, a.level, a.nature, a.is_group, a.created, a.updated,
+        (SELECT COALESCE(SUM(ei.value), 0) FROM entry_items ei WHERE ei.account_id = a.id AND ei.type = 'debit') as total_debits,
+        (SELECT COALESCE(SUM(ei.value), 0) FROM entry_items ei WHERE ei.account_id = a.id AND ei.type = 'credit') as total_credits
+      FROM accounts a`,
       fields: [
         {
           name: 'project_id',
@@ -61,8 +44,8 @@ migrate(
         { name: 'level', type: 'number', required: false },
         { name: 'nature', type: 'text', required: false },
         { name: 'is_group', type: 'bool', required: false },
-        { name: 'total_debits', type: 'number', required: false },
-        { name: 'total_credits', type: 'number', required: false },
+        { name: 'total_debits', type: 'json', required: false },
+        { name: 'total_credits', type: 'json', required: false },
         { name: 'created', type: 'date', required: false },
         { name: 'updated', type: 'date', required: false },
       ],
