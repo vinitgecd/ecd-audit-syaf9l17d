@@ -22,12 +22,19 @@ migrate(
         JOIN accounts a ON a.parent_id = t.child_id
         WHERE t.depth < 10
       ),
+      direct_balances AS (
+        SELECT account_id,
+               SUM(CASE WHEN type = 'debit' THEN value ELSE 0 END) as debits,
+               SUM(CASE WHEN type = 'credit' THEN value ELSE 0 END) as credits
+        FROM entry_items
+        GROUP BY account_id
+      ),
       rollup AS (
         SELECT t.root_id as account_id,
-               COALESCE(SUM(CASE WHEN ei.type = 'debit' THEN ei.value ELSE 0 END), 0) as total_debits,
-               COALESCE(SUM(CASE WHEN ei.type = 'credit' THEN ei.value ELSE 0 END), 0) as total_credits
+               COALESCE(SUM(db.debits), 0) as total_debits,
+               COALESCE(SUM(db.credits), 0) as total_credits
         FROM account_tree t
-        LEFT JOIN entry_items ei ON ei.account_id = t.child_id
+        LEFT JOIN direct_balances db ON db.account_id = t.child_id
         GROUP BY t.root_id
       )
       SELECT a.id, a.project_id, a.code, a.name, a.type, a.parent_id, a.level, a.nature, a.is_group, a.referential_code, a.created, a.updated,
