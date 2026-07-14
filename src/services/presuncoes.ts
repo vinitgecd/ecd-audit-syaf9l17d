@@ -1,5 +1,6 @@
 import pb from '@/lib/pocketbase/client'
 import type { Account, EntryItem } from '@/services/accounting'
+import { getAssetsByCategory, detectMissingAssets } from '@/services/presuncoes-ativo-oculto'
 
 export interface CashBalanceEntry {
   id: string
@@ -109,4 +110,21 @@ export const getNegativeCashBalanceEntries = async (
     (a, b) => a.entryDate.localeCompare(b.entryDate) || a.created.localeCompare(b.created),
   )
   return results
+}
+
+export interface HiddenAssetsSummary {
+  riskLevel: 'low' | 'medium' | 'high'
+  missingCount: number
+  totalAssetValue: number
+}
+
+export const getHiddenAssetsSummary = async (projectId: string): Promise<HiddenAssetsSummary> => {
+  const categories = await getAssetsByCategory(projectId)
+  const assessment = detectMissingAssets(categories)
+  const totalAssetValue = categories.reduce((sum, c) => sum + c.totalBalance, 0)
+  return {
+    riskLevel: assessment.riskLevel,
+    missingCount: assessment.missingCount,
+    totalAssetValue,
+  }
 }
