@@ -46,6 +46,7 @@ export default function Balancete() {
     loading,
     isProcessing,
     error,
+    projectId: storeProjectId,
     loadBalancete,
     resetProject,
     processedBalancete,
@@ -130,8 +131,11 @@ export default function Balancete() {
     return () => clearTimeout(timer)
   }, [isLoadingData])
 
-  const processedData = processedBalancete?.data || []
-  const parentMap = processedBalancete?.parentMap || new Map<string, string | undefined>()
+  const dataBelongsToCurrentProject = storeProjectId === projectId
+  const processedData = dataBelongsToCurrentProject ? processedBalancete?.data || [] : []
+  const parentMap = dataBelongsToCurrentProject
+    ? processedBalancete?.parentMap || new Map<string, string | undefined>()
+    : new Map<string, string | undefined>()
 
   const filteredData = useMemo(() => {
     const maxLevel = parseInt(debouncedNivel || '5', 10)
@@ -369,7 +373,8 @@ export default function Balancete() {
                     </div>
                   </TableCell>
                 </TableRow>
-              ) : processedData.length === 0 && !debouncedSearch ? (
+              ) : !dataBelongsToCurrentProject ||
+                (processedData.length === 0 && !debouncedSearch) ? (
                 <TableRow>
                   <TableCell colSpan={10} className="h-32 text-center">
                     <div className="flex flex-col items-center justify-center text-muted-foreground gap-2 py-8">

@@ -1,4 +1,13 @@
-import React, { createContext, useContext, useState, useCallback, ReactNode, useRef } from 'react'
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useEffect,
+  ReactNode,
+  useRef,
+} from 'react'
+import pb from '@/lib/pocketbase/client'
 import {
   Account,
   EntryItem,
@@ -60,6 +69,7 @@ interface AccountingState {
   loadBalancete: (projectId: string, level: number, search: string) => Promise<void>
   loadChildren: (projectId: string, parentId: string) => Promise<void>
   resetProject: (projectId: string) => Promise<void>
+  resetStore: () => void
 }
 
 const AccountingContext = createContext<AccountingState | undefined>(undefined)
@@ -115,6 +125,35 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
   const [backgroundError, setBackgroundError] = useState<string | null>(null)
   const fetchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const lastProgressUpdateRef = useRef<number>(0)
+
+  const resetStore = useCallback(() => {
+    setProjectId(null)
+    setAccounts([])
+    setItems([])
+    setProcessedBalancete(null)
+    setProcessedAnalysis(null)
+    setExpandedGroups({})
+    setLoadedChildren({})
+    setHasLoaded(false)
+    setError(null)
+    setBackgroundError(null)
+    setIsTimeout(false)
+    setProgressText('')
+    setIsBackgroundLoading(false)
+    setIsProcessing(false)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    const unsubscribe = pb.authStore.onChange((_token, record) => {
+      if (!record) {
+        resetStore()
+      }
+    })
+    return () => {
+      unsubscribe()
+    }
+  }, [resetStore])
 
   const resetProject = useCallback(async (id: string) => {
     try {
@@ -435,6 +474,7 @@ export const AccountingProvider = ({ children }: { children: ReactNode }) => {
         loadBalancete,
         loadChildren,
         resetProject,
+        resetStore,
       },
     },
     children,
