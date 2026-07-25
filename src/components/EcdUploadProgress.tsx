@@ -44,21 +44,21 @@ const phaseConfig: Record<
     spin: false,
   },
   reading: {
-    label: 'Lendo arquivo...',
+    label: 'Lendo arquivo…',
     variant: 'secondary',
     color: 'text-blue-500',
     icon: Loader2,
     spin: true,
   },
   processing: {
-    label: 'Processando...',
+    label: 'Processando registros…',
     variant: 'secondary',
     color: 'text-blue-500',
     icon: Loader2,
     spin: true,
   },
   uploading: {
-    label: 'Enviando...',
+    label: 'Enviando dados…',
     variant: 'secondary',
     color: 'text-blue-500',
     icon: Upload,
@@ -100,6 +100,7 @@ export function EcdUploadProgress({
   const isActive = phase === 'reading' || phase === 'processing' || phase === 'uploading'
   const hasErrors =
     (phase === 'error' || (failedLines != null && failedLines.length > 0)) && !!onDownloadErrorLog
+  const showProgress = phase !== 'completed'
 
   return (
     <div className="space-y-4 animate-fade-in">
@@ -117,33 +118,35 @@ export function EcdUploadProgress({
         )}
       </div>
 
-      <div className="space-y-2">
-        <Progress
-          value={progress}
-          className={cn(
-            'h-3',
-            phase === 'completed' && '[&>div]:bg-green-500',
-            phase === 'error' && '[&>div]:bg-red-500',
-          )}
-        />
-        <div className="flex justify-between text-sm">
-          <span className="text-muted-foreground font-medium">{progress}%</span>
-          {isActive && speed && <span className="text-muted-foreground">{speed}</span>}
+      {showProgress && (
+        <div className="space-y-2">
+          <Progress
+            value={progress}
+            className={cn(
+              'h-3',
+              phase === 'completed' && '[&>div]:bg-green-500',
+              phase === 'error' && '[&>div]:bg-red-500',
+            )}
+          />
+          <div className="flex justify-between text-sm">
+            <span className="text-muted-foreground font-medium">{progress}%</span>
+            {isActive && speed && <span className="text-muted-foreground">{speed}</span>}
+          </div>
         </div>
-      </div>
+      )}
 
       {isActive && (
         <div className="grid grid-cols-2 gap-2 text-sm">
           <div className="rounded-md bg-muted/50 px-3 py-2">
             <span className="text-muted-foreground">Registros: </span>
             <span className="font-medium">
-              {uploadedRecords} de {totalRecords}
+              {uploadedRecords} de {totalRecords} processados
             </span>
           </div>
           <div className="rounded-md bg-muted/50 px-3 py-2">
-            <span className="text-muted-foreground">Lotes: </span>
+            <span className="text-muted-foreground">Lote: </span>
             <span className="font-medium">
-              {uploadedBatches} de {totalBatches}
+              {uploadedBatches} de {totalBatches} enviados
             </span>
           </div>
         </div>

@@ -1,25 +1,23 @@
-import type { FailedLine } from '@/lib/error-log'
-
 const CHUNK_SIZE = 1024 * 1024
-const BATCH_SIZE = 50
 
-export interface EcdBatch {
-  action: 'clear' | 'accounts' | 'entries'
-  data: any[]
-  batchIndex: number
-  totalBatches: number
+export interface UploadRecord {
+  type: string
+  fields: Record<string, unknown>
+  projectId: string
+  lineNumber: number
+}
+
+export interface FailedLine {
+  lineNumber: number
+  error: string
 }
 
 export interface ParseResult {
-  totalAccounts: number
-  totalEntries: number
+  accounts: UploadRecord[]
+  entries: UploadRecord[]
+  accountsCount: number
+  entriesCount: number
   failedLines: FailedLine[]
-}
-
-export interface ParseCallbacks {
-  onProgress: (progress: number, phase: string) => void
-  onBatch: (batch: EcdBatch) => Promise<any>
-  onParseComplete?: (totals: { totalAccounts: number; totalEntries: number }) => void
 }
 
 function generateId(): string {
@@ -30,17 +28,32 @@ function generateId(): string {
   return id
 }
 
-export async function parseAndImportEcd(file: File, cb: ParseCallbacks): Promise<ParseResult> {
+function parseAccountType(codNat: string, code: string): string {
+  if (codNat === '02') return 'liability'
+  if (codNat === '03') return 'equity'
+  if (codNat === '04') return code.startsWith('3') ? 'revenue' : 'expense'
+  if (codNat) return 'expense'
+  return 'asset'
+}
+
+export async function parseAndImportEcd(
+  file: File,
+  projectId: string,
+  onProgress: (progress: number) => void,
+  isCancelled?: () => boolean,
+): Promise<ParseResult> {
   const totalChunks = Math.ceil(file.size / CHUNK_SIZE)
   const failedLines: FailedLine[] = []
-  const accounts: any[] = []
-  const entries: any[] = []
+  const accounts: UploadRecord[] = []
+  const entries: UploadRecord[] = []
   const codeToId: Record<string, string> = {}
-  let currentEntry: any = null
+  let currentEntryItems: Array<Record<string, unknown>> | null = null
   let leftover = ''
   let lineNum = 0
 
   for (let ci = 0; ci < totalChunks; ci++) {
+    if (isCancelled?.()) throw new Error('CANCELLED')
+
     const start = ci * CHUNK_SIZE
     const end = Math.min(start + CHUNK_SIZE, file.size)
     const text = await file.slice(start, end).text()
@@ -50,9 +63,12 @@ export async function parseAndImportEcd(file: File, cb: ParseCallbacks): Promise
     for (const line of lines) {
       lineNum++
       if (!line.trim()) continue
-      const parts = line.split('|')
+
       try {
-        if (parts[1] === 'I050') {
+        const parts = line.split('|')
+        const recType = parts[1] || ''
+
+        if (recType === 'I050') {
           const code = parts[6] || ''
           const name = parts[8] || ''
           if (!code || !name) {
@@ -60,46 +76,54 @@ export async function parseAndImportEcd(file: File, cb: ParseCallbacks): Promise
             continue
           }
           const codNat = parts[3] || ''
-          const indCta = parts[4] || ''
-          let type = 'asset'
-          if (codNat === '02') type = 'liability'
-          else if (codNat === '03') type = 'equity'
-          else if (codNat === '04') type = code.startsWith('3') ? 'revenue' : 'expense'
-          else if (codNat) type = 'expense'
           const id = generateId()
           codeToId[code] = id
           accounts.push({
-            id,
-            code,
-            name,
-            type,
-            level: parseInt(parts[5] || '1', 10) || 1,
-            nature: codNat,
-            is_group: indCta === 'S',
-            parent_code: parts[7] || '',
-            _lineNumber: lineNum,
+            type: 'account',
+            fields: {
+              id,
+              code,
+              name,
+              accountType: parseAccountType(codNat, code),
+              level: parseInt(parts[5] || '1', 10) || 1,
+              nature: codNat,
+              is_group: (parts[4] || '') === 'S',
+              parent_code: parts[7] || '',
+            },
+            projectId,
+            lineNumber: lineNum,
           })
-        } else if (parts[1] === 'I200') {
+        } else if (recType === 'I200') {
           const dtLcto = parts[3] || ''
           let date = new Date().toISOString()
-          if (dtLcto.length === 8)
+          if (dtLcto.length === 8) {
             date = `${dtLcto.substring(4, 8)}-${dtLcto.substring(2, 4)}-${dtLcto.substring(0, 2)}T00:00:00.000Z`
-          currentEntry = {
-            date,
-            description: parts[8] || `Lancamento ${parts[2] || ''}`,
-            reference: parts[2] || '',
-            items: [],
-            _lineNumber: lineNum,
           }
-          entries.push(currentEntry)
-        } else if (parts[1] === 'I250' && currentEntry) {
+          const id = generateId()
+          currentEntryItems = []
+          entries.push({
+            type: 'entry',
+            fields: {
+              id,
+              date,
+              description: parts[8] || `Lancamento ${parts[2] || ''}`,
+              reference: parts[2] || '',
+              items: currentEntryItems,
+            },
+            projectId,
+            lineNumber: lineNum,
+          })
+        } else if (recType === 'I250' && currentEntryItems) {
           const val = parseFloat((parts[4] || '0').replace(',', '.'))
           if (isNaN(val) || val === 0) {
             failedLines.push({ lineNumber: lineNum, error: 'Valor invalido ou zero no I250' })
             continue
           }
-          if (parts[8]) currentEntry.description = parts[8]
-          currentEntry.items.push({
+          if (parts[8]) {
+            const lastEntry = entries[entries.length - 1]
+            lastEntry.fields.description = parts[8]
+          }
+          currentEntryItems.push({
             account_code: parts[2] || '',
             type: parts[5] === 'D' ? 'debit' : 'credit',
             value: val,
@@ -110,37 +134,35 @@ export async function parseAndImportEcd(file: File, cb: ParseCallbacks): Promise
       }
     }
 
-    await new Promise((r) => setTimeout(r, 0))
-    const phase = ci === 0 ? 'reading' : 'processing'
-    cb.onProgress(Math.floor(((ci + 1) / totalChunks) * 90), phase)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    onProgress(Math.floor(((ci + 1) / totalChunks) * 100))
   }
 
   if (leftover.trim()) {
     lineNum++
-    const parts = leftover.split('|')
     try {
-      if (parts[1] === 'I050') {
+      const parts = leftover.split('|')
+      if ((parts[1] || '') === 'I050') {
         const code = parts[6] || ''
         const name = parts[8] || ''
         if (code && name) {
           const codNat = parts[3] || ''
-          let type = 'asset'
-          if (codNat === '02') type = 'liability'
-          else if (codNat === '03') type = 'equity'
-          else if (codNat === '04') type = code.startsWith('3') ? 'revenue' : 'expense'
-          else if (codNat) type = 'expense'
           const id = generateId()
           codeToId[code] = id
           accounts.push({
-            id,
-            code,
-            name,
-            type,
-            level: parseInt(parts[5] || '1', 10) || 1,
-            nature: codNat,
-            is_group: parts[4] === 'S',
-            parent_code: parts[7] || '',
-            _lineNumber: lineNum,
+            type: 'account',
+            fields: {
+              id,
+              code,
+              name,
+              accountType: parseAccountType(codNat, code),
+              level: parseInt(parts[5] || '1', 10) || 1,
+              nature: codNat,
+              is_group: (parts[4] || '') === 'S',
+              parent_code: parts[7] || '',
+            },
+            projectId,
+            lineNumber: lineNum,
           })
         }
       }
@@ -149,65 +171,53 @@ export async function parseAndImportEcd(file: File, cb: ParseCallbacks): Promise
     }
   }
 
-  if (accounts.length === 0) throw new Error('O arquivo nao contem o bloco I050 (Plano de Contas).')
-
-  accounts.sort((a, b) => (a.level || 1) - (b.level || 1))
-  for (const a of accounts) {
-    if (a.parent_code) {
-      a.parent_id = codeToId[a.parent_code] || ''
-      delete a.parent_code
-    }
+  if (accounts.length === 0) {
+    throw new Error('O arquivo nao contem o bloco I050 (Plano de Contas).')
   }
-  for (const e of entries) {
-    for (const item of e.items) {
-      item.account_id = codeToId[item.account_code] || ''
+
+  accounts.sort((a, b) => (a.fields.level as number) - (b.fields.level as number))
+  for (const acc of accounts) {
+    const parentCode = acc.fields.parent_code as string
+    if (parentCode) {
+      acc.fields.parent_id = codeToId[parentCode] || ''
+    }
+    delete acc.fields.parent_code
+  }
+
+  for (const entry of entries) {
+    const items = entry.fields.items as Array<Record<string, unknown>>
+    for (const item of items) {
+      const accountCode = item.account_code as string
+      item.account_id = codeToId[accountCode] || ''
       if (
         !item.account_id &&
-        !failedLines.some(
-          (f) => f.lineNumber === e._lineNumber && f.error.includes(item.account_code),
-        )
-      )
+        !failedLines.some((f) => f.lineNumber === entry.lineNumber && f.error.includes(accountCode))
+      ) {
         failedLines.push({
-          lineNumber: e._lineNumber,
-          error: `Conta nao encontrada: ${item.account_code}`,
+          lineNumber: entry.lineNumber,
+          error: `Conta nao encontrada: ${accountCode}`,
         })
+      }
       delete item.account_code
     }
-    e.items = e.items.filter((i: any) => i.account_id)
+    entry.fields.items = items.filter((i) => i.account_id)
   }
 
-  const validEntries = entries.filter((e) => e.items.length > 0)
-  for (const e of entries.filter((e) => e.items.length === 0))
-    if (!failedLines.some((f) => f.lineNumber === e._lineNumber))
-      failedLines.push({ lineNumber: e._lineNumber, error: 'Lancamento sem partidas validas' })
-
-  cb.onParseComplete?.({ totalAccounts: accounts.length, totalEntries: validEntries.length })
-
-  cb.onProgress(90, 'uploading')
-  await cb.onBatch({ action: 'clear', data: [], batchIndex: 0, totalBatches: 0 })
-
-  const uploadBatched = async (
-    action: 'accounts' | 'entries',
-    records: any[],
-    baseProg: number,
-    range: number,
-  ) => {
-    const total = Math.max(1, Math.ceil(records.length / BATCH_SIZE))
-    for (let i = 0; i < records.length; i += BATCH_SIZE) {
-      const bi = Math.floor(i / BATCH_SIZE)
-      await cb.onBatch({
-        action,
-        data: records.slice(i, i + BATCH_SIZE),
-        batchIndex: bi,
-        totalBatches: total,
-      })
-      cb.onProgress(baseProg + Math.floor(((bi + 1) / total) * range), 'uploading')
+  const validEntries = entries.filter((e) => (e.fields.items as unknown[]).length > 0)
+  for (const e of entries) {
+    if (
+      (e.fields.items as unknown[]).length === 0 &&
+      !failedLines.some((f) => f.lineNumber === e.lineNumber)
+    ) {
+      failedLines.push({ lineNumber: e.lineNumber, error: 'Lancamento sem partidas validas' })
     }
   }
 
-  await uploadBatched('accounts', accounts, 90, 5)
-  await uploadBatched('entries', validEntries, 95, 5)
-  cb.onProgress(100, 'uploading')
-
-  return { totalAccounts: accounts.length, totalEntries: validEntries.length, failedLines }
+  return {
+    accounts,
+    entries: validEntries,
+    accountsCount: accounts.length,
+    entriesCount: validEntries.length,
+    failedLines,
+  }
 }

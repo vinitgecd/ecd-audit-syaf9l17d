@@ -1,7 +1,6 @@
 import { useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { Card, CardContent } from '@/components/ui/card'
-import pb from '@/lib/pocketbase/client'
 import { getErrorMessage } from '@/lib/pocketbase/errors'
 import { parseAndImportEcd } from '@/lib/ecd-parser'
 import { UploadCloud, FileType2, Loader2 } from 'lucide-react'
@@ -71,7 +70,7 @@ export default function Import() {
       const processData = async () => {
         if (id === 'ecd' && projectId) {
           try {
-            const result = await parseAndImportEcd(state.file!, projectId, pb, (p) => {
+            const result = await parseAndImportEcd(state.file!, projectId, (p) => {
               updateTab(id, { progress: p })
             })
 
