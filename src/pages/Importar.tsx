@@ -1,12 +1,11 @@
-import { useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useEcdUpload } from '@/hooks/use-ecd-upload'
 import { EcdUploadProgress } from '@/components/EcdUploadProgress'
+import { FileDropZone } from '@/components/FileDropZone'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Upload, FileText, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react'
-import { cn } from '@/lib/utils'
 
 export default function Importar() {
   const { projectId } = useParams<{ projectId: string }>()
@@ -35,17 +34,14 @@ export default function Importar() {
     downloadErrorLogFile,
   } = useEcdUpload(projectId)
 
-  const inputRef = useRef<HTMLInputElement>(null)
-  const [dragActive, setDragActive] = useState(false)
-
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0]
     if (selected) selectFile(selected)
+    e.target.value = ''
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
-    setDragActive(false)
     const dropped = e.dataTransfer.files?.[0]
     if (dropped) selectFile(dropped)
   }
@@ -76,46 +72,14 @@ export default function Importar() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div
-            className={cn(
-              'flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-8 transition-colors',
-              dragActive ? 'border-primary bg-primary/5' : 'border-muted-foreground/25',
-              file && 'border-solid border-primary/50',
-              isUploading && 'pointer-events-none opacity-50',
-            )}
-            onDragOver={(e) => {
-              e.preventDefault()
-              setDragActive(true)
-            }}
-            onDragLeave={() => setDragActive(false)}
+          <FileDropZone
+            file={file}
+            onFileSelect={handleFileSelect}
             onDrop={handleDrop}
-          >
-            <input
-              ref={inputRef}
-              type="file"
-              accept=".txt"
-              className="hidden"
-              onChange={handleFileSelect}
-              disabled={isUploading}
-            />
-            <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
-            <p className="text-sm text-muted-foreground">
-              {file ? (
-                <span className="font-medium text-foreground">{file.name}</span>
-              ) : (
-                'Arraste o arquivo .txt aqui ou clique para selecionar'
-              )}
-            </p>
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-3"
-              onClick={() => inputRef.current?.click()}
-              disabled={isUploading}
-            >
-              Selecionar arquivo
-            </Button>
-          </div>
+            disabled={isUploading}
+            inputId="ecd-file-input"
+            accept=".txt"
+          />
 
           {isValidating && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
