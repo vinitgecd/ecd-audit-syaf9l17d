@@ -1,5 +1,4 @@
 import pb from '@/lib/pocketbase/client'
-import { compressData } from '@/lib/compression'
 
 export interface EcdUploadResult {
   success: boolean
@@ -36,14 +35,13 @@ export async function uploadEcdChunk(
   records: EcdChunkData[],
 ): Promise<EcdUploadResult> {
   try {
-    const compressed = compressData(JSON.stringify(records))
     const result = await pb.send('/backend/v1/ecd/upload-chunk', {
       method: 'POST',
       body: JSON.stringify({
         projectId,
         action: 'upload',
         fileId,
-        compressedData: compressed,
+        records,
       }),
     })
     return { success: true, inserted: (result as { inserted?: number }).inserted ?? 0 }

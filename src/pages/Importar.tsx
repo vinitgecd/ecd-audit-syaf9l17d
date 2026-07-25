@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useEcdUpload } from '@/hooks/use-ecd-upload'
+import { useEcdImport } from '@/hooks/use-ecd-import'
 import { EcdUploadProgress } from '@/components/EcdUploadProgress'
 import { FileDropZone } from '@/components/FileDropZone'
 import { Button } from '@/components/ui/button'
@@ -10,7 +11,7 @@ import { Upload, FileText, ArrowLeft, CheckCircle, AlertCircle } from 'lucide-re
 export default function Importar() {
   const { projectId } = useParams<{ projectId: string }>()
   const {
-    file,
+    file: uploadFile,
     progress,
     phase,
     status,
@@ -26,7 +27,7 @@ export default function Importar() {
     validationPassed,
     failedLines,
     isUploading,
-    selectFile,
+    selectFile: selectUploadFile,
     startUpload,
     cancelUpload,
     resetUpload,
@@ -34,16 +35,24 @@ export default function Importar() {
     downloadErrorLogFile,
   } = useEcdUpload(projectId)
 
+  const { file, selectFile, error, clearFile } = useEcdImport()
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0]
-    if (selected) selectFile(selected)
+    if (selected) {
+      selectUploadFile(selected)
+      selectFile(selected)
+    }
     e.target.value = ''
   }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     const dropped = e.dataTransfer.files?.[0]
-    if (dropped) selectFile(dropped)
+    if (dropped) {
+      selectUploadFile(dropped)
+      selectFile(dropped)
+    }
   }
 
   const showProgress = isUploading || status === 'completed' || status === 'error'
@@ -73,13 +82,27 @@ export default function Importar() {
         </CardHeader>
         <CardContent className="space-y-4">
           <FileDropZone
-            file={file}
+            file={uploadFile}
             onFileSelect={handleFileSelect}
             onDrop={handleDrop}
             disabled={isUploading}
             inputId="ecd-file-input"
             accept=".txt"
           />
+
+          {file && (
+            <div className="flex items-center justify-between rounded-md border border-border bg-muted/50 px-3 py-2">
+              <p className="text-sm text-muted-foreground">
+                Arquivo selecionado:{' '}
+                <span className="font-medium text-foreground">{file.name}</span>
+              </p>
+              <Button variant="ghost" size="sm" onClick={clearFile}>
+                Limpar
+              </Button>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-red-500">{error}</p>}
 
           {isValidating && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -106,7 +129,7 @@ export default function Importar() {
             </Alert>
           )}
 
-          {file &&
+          {uploadFile &&
             validationPassed &&
             !isUploading &&
             status !== 'completed' &&

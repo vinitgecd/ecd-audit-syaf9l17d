@@ -221,3 +221,21 @@ export async function parseAndImportEcd(
     failedLines,
   }
 }
+
+export async function parseEcdFile(file: File): Promise<{
+  accounts: Record<string, unknown>[]
+  entries: Record<string, unknown>[]
+  failedLines: FailedLine[]
+}> {
+  const result = await parseAndImportEcd(
+    file,
+    '',
+    () => {},
+    () => false,
+  )
+  return {
+    accounts: result.accounts.map((a) => a.fields),
+    entries: result.entries.map((e) => e.fields),
+    failedLines: result.failedLines,
+  }
+}
