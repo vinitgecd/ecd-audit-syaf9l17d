@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { useEcdUpload } from '@/hooks/use-ecd-upload'
 import { useEcdImport } from '@/hooks/use-ecd-import'
@@ -33,9 +34,21 @@ export default function Importar() {
     resetUpload,
     retryUpload,
     downloadErrorLogFile,
+    clearValidation: clearUploadValidation,
   } = useEcdUpload(projectId)
 
-  const { file, selectFile, error, clearFile } = useEcdImport()
+  const {
+    file,
+    selectFile,
+    error,
+    clearFile,
+    clearValidation: clearImportValidation,
+  } = useEcdImport()
+
+  useEffect(() => {
+    clearUploadValidation()
+    clearImportValidation()
+  }, [clearUploadValidation, clearImportValidation])
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0]
@@ -96,22 +109,29 @@ export default function Importar() {
                 Arquivo selecionado:{' '}
                 <span className="font-medium text-foreground">{file.name}</span>
               </p>
-              <Button variant="ghost" size="sm" onClick={clearFile}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  clearFile()
+                  resetUpload()
+                }}
+              >
                 Limpar
               </Button>
             </div>
           )}
 
-          {error && <p className="text-sm text-red-500">{error}</p>}
+          {error && !validationError && <p className="text-sm text-red-500">{error}</p>}
 
-          {isValidating && (
+          {isValidating && !validationError && !validationPassed && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" />
               Validando estrutura do arquivo...
             </div>
           )}
 
-          {validationError && (
+          {validationError && !validationPassed && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertTitle>Arquivo inválido</AlertTitle>

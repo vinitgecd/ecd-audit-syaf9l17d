@@ -50,29 +50,37 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
   const fileRef = useRef<File | null>(null)
   const cancelledRef = useRef(false)
 
-  const selectFile = useCallback((selectedFile: File) => {
-    setIsValidating(true)
+  const clearValidation = useCallback(() => {
     setValidationError(null)
     setValidationPassed(false)
-
-    if (!selectedFile.name.toLowerCase().endsWith('.txt')) {
-      setValidationError('Formato invalido. Selecione um arquivo .txt da ECD.')
-      setIsValidating(false)
-      return
-    }
-
-    if (selectedFile.size > MAX_FILE_SIZE) {
-      setValidationError('Arquivo muito grande. Tamanho maximo: 50MB.')
-      setIsValidating(false)
-      return
-    }
-
-    setFile(selectedFile)
-    fileRef.current = selectedFile
-    setValidationPassed(true)
-    setMessage(`Arquivo selecionado: ${selectedFile.name}`)
     setIsValidating(false)
   }, [])
+
+  const selectFile = useCallback(
+    (selectedFile: File) => {
+      clearValidation()
+      setIsValidating(true)
+
+      if (!selectedFile.name.toLowerCase().endsWith('.txt')) {
+        setValidationError('Formato invalido. Selecione um arquivo .txt da ECD.')
+        setIsValidating(false)
+        return
+      }
+
+      if (selectedFile.size > MAX_FILE_SIZE) {
+        setValidationError('Arquivo muito grande. Tamanho maximo: 50MB.')
+        setIsValidating(false)
+        return
+      }
+
+      setFile(selectedFile)
+      fileRef.current = selectedFile
+      setValidationPassed(true)
+      setMessage(`Arquivo selecionado: ${selectedFile.name}`)
+      setIsValidating(false)
+    },
+    [clearValidation],
+  )
 
   const resetUpload = useCallback(() => {
     setFile(null)
@@ -263,6 +271,7 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
     failedLines,
     isUploading,
     selectFile,
+    clearValidation,
     startUpload,
     cancelUpload,
     resetUpload,
