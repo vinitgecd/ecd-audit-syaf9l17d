@@ -1,5 +1,12 @@
 import { useState, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import { uploadEcdChunk, clearProjectData } from '@/services/ecdUploadService'
+import {
+  downloadDetailedErrorLog,
+  type ErrorLogDetails,
+  type FailedLine as ErrorLogFailedLine,
+} from '@/lib/error-log'
+import { EcdParseError } from '@/lib/ecd-parser'
 
 export type UploadPhase = 'idle' | 'reading' | 'processing' | 'uploading' | 'completed' | 'error'
 export type UploadStatus = 'idle' | 'uploading' | 'completed' | 'error'
@@ -49,6 +56,10 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
   const uploadInProgressRef = useRef(false)
   const fileRef = useRef<File | null>(null)
   const cancelledRef = useRef(false)
+  const progressRef = useRef(0)
+  const parseFailedLinesRef = useRef<FailedLine[]>([])
+  const totalRecordsRef = useRef(0)
+  const uploadedRecordsRef = useRef(0)
 
   const clearValidation = useCallback(() => {
     setValidationError(null)
@@ -86,11 +97,14 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
     setFile(null)
     fileRef.current = null
     setProgress(0)
+    progressRef.current = 0
     setPhase('idle')
     setStatus('idle')
     setMessage('')
     setUploadedRecords(0)
+    uploadedRecordsRef.current = 0
     setTotalRecords(0)
+    totalRecordsRef.current = 0
     setUploadedBatches(0)
     setTotalBatches(0)
     setSpeed('N/A')
@@ -99,6 +113,7 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
     setValidationError(null)
     setValidationPassed(false)
     setFailedLines([])
+    parseFailedLinesRef.current = []
     setIsUploading(false)
     cancelledRef.current = false
   }, [])
@@ -119,9 +134,11 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
     setPhase('reading')
     setMessage('Lendo arquivo...')
     setProgress(0)
+    progressRef.current = 0
     setUploadedRecords(0)
-    setUploadedBatches(0)
+    uploadedRecordsRef.current = 0
     setFailedLines([])
+    parseFailedLinesRef.current = []
 
     const startTime = Date.now()
 
@@ -131,10 +148,19 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
 
       if (cancelledRef.current || !mountedRef.current) return
 
+      parseFailedLinesRef.current = parseFailedLines as FailedLine[]
+
       const total = accounts.length + entries.length
+      totalRecordsRef.current = total
       setTotalRecords(total)
       setPhase('uploading')
       setMessage('Enviando dados...')
+
+      console.error('[ECD Upload] Iniciando upload de dados:', {
+        totalRecords: total,
+        accounts: accounts.length,
+        entries: entries.length,
+      })
 
       await clearProjectData(projectId)
 
@@ -163,7 +189,9 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
         }
 
         uploaded += chunk.length
+        uploadedRecordsRef.current = uploaded
         const pct = Math.round((uploaded / total) * 100)
+        progressRef.current = pct
 
         setUploadedBatches(batchNum)
         setProgress(pct)
@@ -194,19 +222,46 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
       if (cancelledRef.current || !mountedRef.current) return
 
       if (parseFailedLines && parseFailedLines.length > 0) {
-        setFailedLines(parseFailedLines)
+        setFailedLines(parseFailedLines as FailedLine[])
       }
 
+      progressRef.current = 100
       setProgress(100)
       setStatus('completed')
       setPhase('completed')
-      setMessage(`Importacao concluida com sucesso. ${uploaded} registros importados.`)
+      setMessage(`Importação concluída com sucesso. ${uploaded} registros importados.`)
     } catch (err) {
       if (cancelledRef.current || !mountedRef.current) return
-      const msg = err instanceof Error ? err.message : 'Erro desconhecido durante a importacao.'
+
+      console.error('[ECD Upload] Erro durante importação:', {
+        error: err,
+        progress: progressRef.current,
+        uploadedRecords: uploadedRecordsRef.current,
+        totalRecords: totalRecordsRef.current,
+      })
+
+      let errorMessage: string
+      let lineNumber: number | undefined
+      let lastFiveLines: string[] | undefined
+      let fileSizeStr: string | undefined
+      const stackTrace = err instanceof Error ? err.stack : undefined
+
+      if (err instanceof EcdParseError) {
+        errorMessage = err.message
+        lineNumber = err.lineNumber
+        lastFiveLines = err.lastFiveLines
+        fileSizeStr = err.fileSize ? `${(err.fileSize / 1024).toFixed(2)} KB` : undefined
+      } else if (err instanceof Error) {
+        errorMessage = err.message
+      } else {
+        errorMessage = 'Erro desconhecido durante a importação.'
+      }
+
+      const displayMsg = lineNumber ? `Erro na linha ${lineNumber}: ${errorMessage}` : errorMessage
+
       setStatus('error')
       setPhase('error')
-      setMessage(msg)
+      setMessage(displayMsg)
     } finally {
       uploadInProgressRef.current = false
       if (mountedRef.current) {
@@ -221,8 +276,9 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
     setStatus('idle')
     setPhase('idle')
     setProgress(0)
+    progressRef.current = 0
     setIsUploading(false)
-    setMessage('Importacao cancelada.')
+    setMessage('Importação cancelada.')
   }, [])
 
   const retryUpload = useCallback(() => {
@@ -238,20 +294,29 @@ export function useEcdUpload(arg?: string | UseEcdUploadOptions) {
   }, [resetUpload, startUpload])
 
   const downloadErrorLogFile = useCallback(() => {
-    if (failedLines.length === 0) return
+    try {
+      const currentFile = fileRef.current
+      const errMessage = message || 'Erro desconhecido'
+      const details: ErrorLogDetails = {
+        timestamp: new Date().toLocaleString('pt-BR'),
+        errorMessage: errMessage,
+        stackTrace: undefined,
+        progress: progressRef.current,
+        phase: phase,
+        failedLines: (failedLines.length > 0
+          ? failedLines
+          : parseFailedLinesRef.current) as ErrorLogFailedLine[],
+        fileSize: currentFile ? `${(currentFile.size / 1024).toFixed(2)} KB` : undefined,
+        totalRecords: totalRecordsRef.current || undefined,
+        uploadedRecords: uploadedRecordsRef.current || undefined,
+      }
 
-    const header = 'LOG DE ERROS - IMPORTACAO ECD\n=====================================\n\n'
-    const body = failedLines.map((l) => `Linha ${l.lineNumber}: ${l.error}`).join('\n')
-    const blob = new Blob([header + body + '\n'], { type: 'text/plain;charset=utf-8' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = 'erros-importacao.txt'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
-  }, [failedLines])
+      downloadDetailedErrorLog(details)
+    } catch (downloadErr) {
+      console.error('[ECD Upload] Erro ao gerar log de erros:', downloadErr)
+      toast.error('Erro ao gerar log. Tente novamente.')
+    }
+  }, [failedLines, message, phase])
 
   return {
     file,

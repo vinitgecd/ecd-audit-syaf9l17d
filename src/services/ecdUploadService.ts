@@ -13,8 +13,9 @@ export interface EcdChunkData {
 }
 
 export async function clearProjectData(projectId: string): Promise<EcdUploadResult> {
+  console.error('[ECD Upload] Limpando dados do projeto:', projectId)
   try {
-    const result = await pb.send('/backend/v1/ecd/upload-chunk', {
+    await pb.send('/backend/v1/ecd/upload-chunk', {
       method: 'POST',
       body: JSON.stringify({
         projectId,
@@ -22,9 +23,14 @@ export async function clearProjectData(projectId: string): Promise<EcdUploadResu
         fileId: 'clear',
       }),
     })
+    console.error('[ECD Upload] Dados do projeto limpos com sucesso:', projectId)
     return { success: true, inserted: 0 }
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[ECD Upload] Erro ao limpar dados do projeto:', {
+      projectId,
+      error,
+    })
+    const msg = error instanceof Error ? error.message : 'Erro desconhecido ao limpar dados'
     return { success: false, error: msg }
   }
 }
@@ -34,6 +40,11 @@ export async function uploadEcdChunk(
   fileId: string,
   records: EcdChunkData[],
 ): Promise<EcdUploadResult> {
+  console.error('[ECD Upload] Enviando lote:', {
+    projectId,
+    fileId,
+    recordCount: records.length,
+  })
   try {
     const result = await pb.send('/backend/v1/ecd/upload-chunk', {
       method: 'POST',
@@ -44,9 +55,20 @@ export async function uploadEcdChunk(
         records,
       }),
     })
-    return { success: true, inserted: (result as { inserted?: number }).inserted ?? 0 }
+    const inserted = (result as { inserted?: number }).inserted ?? 0
+    console.error('[ECD Upload] Lote enviado com sucesso:', {
+      inserted,
+      recordCount: records.length,
+    })
+    return { success: true, inserted }
   } catch (error: unknown) {
-    const msg = error instanceof Error ? error.message : 'Unknown error'
+    console.error('[ECD Upload] Erro ao enviar lote:', {
+      projectId,
+      fileId,
+      recordCount: records.length,
+      error,
+    })
+    const msg = error instanceof Error ? error.message : 'Erro desconhecido ao enviar lote'
     return { success: false, error: msg }
   }
 }
