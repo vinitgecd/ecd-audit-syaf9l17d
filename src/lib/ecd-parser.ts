@@ -88,7 +88,7 @@ export async function parseAndImportEcd(
               level: parseInt(parts[5] || '1', 10) || 1,
               nature: codNat,
               is_group: (parts[4] || '') === 'S',
-              parent_code: parts[7] || '',
+              parent_id: parts[7] || '',
             },
             projectId,
             lineNumber: lineNum,
@@ -159,7 +159,7 @@ export async function parseAndImportEcd(
               level: parseInt(parts[5] || '1', 10) || 1,
               nature: codNat,
               is_group: (parts[4] || '') === 'S',
-              parent_code: parts[7] || '',
+              parent_id: parts[7] || '',
             },
             projectId,
             lineNumber: lineNum,
@@ -177,11 +177,8 @@ export async function parseAndImportEcd(
 
   accounts.sort((a, b) => (a.fields.level as number) - (b.fields.level as number))
   for (const acc of accounts) {
-    const parentCode = acc.fields.parent_code as string
-    if (parentCode) {
-      acc.fields.parent_id = codeToId[parentCode] || ''
-    }
-    delete acc.fields.parent_code
+    const parentCode = acc.fields.parent_id as string
+    acc.fields.parent_id = parentCode ? codeToId[parentCode] || '' : ''
   }
 
   for (const entry of entries) {

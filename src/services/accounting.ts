@@ -107,7 +107,7 @@ export const getAccounts = async (projectId: string) => {
     if (!projectId) throw new Error('Project ID is required')
     return await safeCollection('accounts').getFullList<Account>({
       filter: `project_id = "${projectId}"`,
-      sort: 'code',
+      sort: '+level,code',
     })
   } catch (error) {
     console.error('Error in getAccounts:', error)
@@ -127,7 +127,7 @@ export const getAccountBalances = async (projectId: string, level?: number, sear
 
     return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter,
-      sort: 'code',
+      sort: '+level,code',
     })
   } catch (error) {
     console.error('Error in getAccountBalances:', error)
@@ -220,7 +220,7 @@ export const getRootAccountBalances = async (projectId: string) => {
     if (!projectId) throw new Error('Project ID is required')
     return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter: `project_id = "${projectId}" && level = 1`,
-      sort: 'code',
+      sort: '+level,code',
     })
   } catch (error) {
     console.error('Error in getRootAccountBalances:', error)
@@ -233,7 +233,7 @@ export const getChildAccountBalances = async (projectId: string, parentId: strin
     if (!projectId || !parentId) throw new Error('Project ID and Parent ID are required')
     return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter: `project_id = "${projectId}" && parent_id = "${parentId}"`,
-      sort: 'code',
+      sort: '+level,code',
     })
   } catch (error) {
     console.error('Error in getChildAccountBalances:', error)
@@ -251,7 +251,7 @@ export const getAccountBalancesByIds = async (projectId: string, search: string)
     }
     return await safeCollection('account_balances').getFullList<AccountBalance>({
       filter,
-      sort: 'code',
+      sort: '+level,code',
     })
   } catch (error) {
     console.error('Error in getAccountBalancesByIds:', error)
@@ -292,7 +292,7 @@ export const getBalancete = async (
       pageSize,
       {
         filter,
-        sort: 'code',
+        sort: '+level,code',
       },
     )
 

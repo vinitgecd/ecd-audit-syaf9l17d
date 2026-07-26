@@ -100,7 +100,13 @@ const processBalancete = (balances: AccountBalance[]): ProcessedBalancete => {
     }
   })
 
-  const sortedData = finalRows.sort((a, b) => a.codigo.localeCompare(b.codigo))
+  const sortedData = finalRows.sort((a, b) => {
+    if (a.nivel !== b.nivel) return a.nivel - b.nivel
+    const codeA = parseInt(a.codigo, 10) || 0
+    const codeB = parseInt(b.codigo, 10) || 0
+    if (codeA !== codeB) return codeA - codeB
+    return a.conta.localeCompare(b.conta)
+  })
   const pMap = new Map(sortedData.map((d) => [d.id, d.parent_id]))
 
   return { data: sortedData, parentMap: pMap }
